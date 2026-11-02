@@ -1,6 +1,6 @@
-# Radial — Documento técnico v0.3
+# Radial — Documento técnico v0.4
 
-Estado: **Fase 0 completada.** Pendiente de revisión; la fase 1 no ha comenzado.
+Estado: **Fases 0 y 1 completadas.** La fase 2 no ha comenzado. Lo implementado está en la sección 14; todo lo demás sigue siendo diseño.
 
 Convención: **[Comprobado]** = verificado con documentación oficial o en este equipo. **[Por validar]** = propuesta que debe confirmarse con un prototipo o prueba.
 
@@ -9,7 +9,8 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 | Versión | Cambios |
 |---|---|
 | v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
-| **v0.3** | Compatibilidad oficial: **Windows 11 x64 estable 25H2+**, sin Windows 10. Corrección: la build 26300 es Windows 11 **26H2**, disponible en el canal de disponibilidad general desde el 29-sep-2026, no una build Insider. E-1 (bordes) vuelve a **abierto** con alternativas documentadas. Timeout de atajos 5 s configurable. Primera escritura por creación y siguientes por reemplazo atómico. Estrategia explícita para acciones de tipo desconocido. Eliminada la resincronización con `GetAsyncKeyState` en callbacks. Resultados de la fase 0. |
+| **v0.4** | Fase 1 implementada: modelo de dominio, geometría, histéresis, motor, submenús y validador en `Radial.Core`. La fórmula de normalización de la sección 5 se corrige para reflejar el código (`%` con corrección explícita). Nueva sección 14. Cambios de diseño respecto a v0.3 listados en 14.6. |
+| v0.3 | Compatibilidad oficial: **Windows 11 x64 estable 25H2+**, sin Windows 10. Corrección: la build 26300 es Windows 11 **26H2**, disponible en el canal de disponibilidad general desde el 29-sep-2026, no una build Insider. E-1 (bordes) vuelve a **abierto** con alternativas documentadas. Timeout de atajos 5 s configurable. Primera escritura por creación y siguientes por reemplazo atómico. Estrategia explícita para acciones de tipo desconocido. Eliminada la resincronización con `GetAsyncKeyState` en callbacks. Resultados de la fase 0. |
 
 ## 1. Compatibilidad y entorno
 
@@ -115,12 +116,12 @@ Con `dx`, `dy` relativos al origen (Y crece hacia abajo):
 
 ```
 θ = atan2(dx, -dy) en grados        → (-180, 180]
-r = θ - 360·floor(θ/360)            → [0, 360)      (sin usar %)
-if (r >= 360) r = 0                 → caso -1e-20 + 360
+r = θ % 360; if (r < 0) r += 360    → [0, 360]
+if (r >= 360) r = 0                 → caso -1e-20 + 360 == 360.0
 sector = floor((r + 22.5) / 45) mod 8     (0 = Norte, 1 = NE … 7 = NO)
 ```
 
-`%` no se usa para normalizar porque en C# conserva el signo del dividendo. Límites en intervalos `[inicio, fin)` en sentido horario. Zona muerta: `distancia < deadZone`, y el vector nulo también lo es. Se rechazan NaN e infinitos. La histéresis angular solo se aplica cuando ya hay un sector seleccionado.
+En C# `%` conserva el signo del dividendo (`-90 % 360 == -90`), por eso se corrige a mano. Se usa `%` y no `θ - 360·floor(θ/360)` porque el resto de coma flotante es exacto, mientras que la resta puede salirse del rango con ángulos enormes. Límites en intervalos `[inicio, fin)` en sentido horario. Zona muerta: `distancia < deadZone`, y el vector nulo también lo es. Se rechazan NaN e infinitos. La histéresis angular solo se aplica cuando ya hay un sector seleccionado.
 
 **Pruebas obligatorias:** las 8 direcciones exactas; para cada uno de los 8 límites (22.5° + 45°·k) un punto a ±0.01°, que debe caer en sectores contiguos distintos (con píxeles enteros un límite exacto es inalcanzable, así que no se afirma qué sector gana en él); normalización de `-0.0`, `-1e-20`, `±180`, `360`, `720` y ángulos grandes; barrido 0°–359.9° cada 0.1° contra tabla de referencia; zona muerta (dentro, fuera, nulo); histéresis sin parpadeo.
 
@@ -244,11 +245,11 @@ La plantilla de xUnit incluía `coverlet.collector`; se **retiró** por no ser n
 | Fase | Contenido | Criterio de aceptación | Estado |
 |---|---|---|---|
 | **0** Esqueleto | Repositorio, solución, 5 proyectos, configuración, documentación. | `restore`, `build -c Release` y `test -c Release` en verde; la app WPF arranca. | ✅ **Completada** |
-| **1** Núcleo | Geometría, motor, máquina de estados con submenús y retroceso, modelo, validación, serialización con acciones desconocidas. | Pruebas de las secciones 4, 5 y 7 en verde. | Pendiente |
+| **1** Núcleo | Geometría, motor, máquina de estados con submenús y retroceso, modelo, validación. La serialización y las acciones desconocidas (7.1) pasan a la fase 5, donde existe el almacenamiento. | Pruebas de las secciones 4 y 5 en verde. | ✅ **Completada** (sección 14) |
 | **2** Spike de ventana | Variantes A–E y ADR. | Tabla de resultados completa y decisión registrada. | Pendiente |
 | **3** Captura global | Hilo de hooks, `ChordTracker`, watchdog, diagnóstico. | Ctrl→botón activa; botón→Ctrl no activa y el clic llega a la aplicación; la rueda no activa; Esc y soltar Ctrl cancelan; sin retraso perceptible del ratón. | Pendiente |
 | **4** Overlay real + acciones | Ventana no activable, `RadialView`, ejecutores (app, archivo, carpeta, URL, atajo diferido). | El foco no cambia; se ejecuta una acción real; el atajo espera a soltar Ctrl y vence a los 5 s. | Pendiente |
-| **5** Submenús + configuración | Dwell con progreso, recentrado, retroceso armado, `config.json` en `%LOCALAPPDATA%`, bandeja con "Salir". **→ MVP.** | Dos niveles estables; archivo corrupto no rompe la app; E-1 evaluado con los criterios de 6.4. | Pendiente |
+| **5** Submenús + configuración | Interfaz del dwell con progreso, serialización JSON con acciones desconocidas (7.1), `config.json` en `%LOCALAPPDATA%`, bandeja con "Salir". **→ MVP.** | Dos niveles estables; archivo corrupto no rompe la app; E-1 evaluado con los criterios de 6.4. | Pendiente |
 | **6** Ajustes y editor | Ventana de ajustes, editor del radial con vista previa. | El ejemplo completo del enunciado se configura solo desde la interfaz. | Pendiente |
 | **7** Apariencia y sistema | Temas, colores, blur según el ADR, autoarranque, instancia única. | Funciona con y sin blur. | Pendiente |
 | **8** Importar/exportar y entrega | Importar, exportar, copias, robustez multimonitor y DPI, README, empaquetado. | Checklist manual completa, con DPI mixto y **en Windows 11 estable**. | Pendiente |
@@ -296,3 +297,120 @@ C:\Coding\Radial
 | `dotnet build -c Release` | **0 advertencias, 0 errores** (warnings como errores activo) |
 | `dotnet test -c Release` | Core.Tests **2/2**, Windows.Tests **1/1** |
 | Arranque de `Radial.App` | Ventana "Radial" visible, proceso responde, DPI 120 (PerMonitorV2 activo) |
+
+## 14. Fase 1: núcleo implementado
+
+Todo el código vive en `Radial.Core` (22 archivos, ~1200 líneas). Sin dependencias NuGet ni referencias a otros proyectos.
+
+### 14.1 Estado: implementado y pendiente
+
+| Implementado (fase 1) | Pendiente |
+|---|---|
+| Modelo de dominio y acciones como datos | Serialización JSON y acciones de tipo desconocido (fase 5) |
+| Geometría, zona muerta e histéresis | Ejecutores de acciones (fase 4) |
+| Motor: inicio, movimiento, tiempo, confirmación, cancelación | Reloj de producción para `IClock` (fase 3/4) |
+| Submenús por permanencia, recentrado y retroceso armado | Entrada real de teclado y ratón (fase 3) |
+| Validador de configuración con códigos estables | Overlay, interfaz, DPI, blur (fases 2, 4, 6, 7) |
+| Pruebas con reloj simulado | Comportamiento en bordes de pantalla, E-1 (fase 5) |
+
+### 14.2 Modelo (`Radial.Core.Model`)
+
+| Tipo | Función |
+|---|---|
+| `MenuId`, `ItemId` | Identificadores tipados (`record struct` sobre `string`). Independientes del nombre visible. Los de elementos son únicos en **toda** la configuración. |
+| `RadialConfiguration` | `RootMenuId`, `Menus`, `Geometry`, `Navigation`. `CreateEmpty()` da la configuración mínima válida. |
+| `RadialMenu` | `Id`, `Name`, `Items`. `GetItem(posición)` devuelve el elemento o `null` si la posición está vacía. Un menú puede tener entre 0 y 8 elementos. |
+| `RadialItem` | `Id`, `Name`, `Position`, `Action`, `Icon?`. `IsGroup` es verdadero si abre otro menú. |
+| `RadialAction` y derivadas | `LaunchApplicationAction`, `OpenFileAction`, `OpenFolderAction`, `OpenUrlAction`, `SendKeysAction`, `OpenMenuAction`. Solo datos; cada una describe sus problemas con `GetProblems()`. |
+| `KeyChord`, `KeyModifiers`, `IconReference` | Representaciones propias, sin tipos de WPF. La tecla es un nombre ("T", "F5"); su traducción real queda para `Radial.Windows`. |
+| `GeometrySettings` | `DeadZoneRadius` (30) y `HysteresisDegrees` (5). |
+| `NavigationSettings` | `SubmenuDwell` (600 ms), `BackDwell` (800 ms), `MaxDepth` (3). |
+
+**Extensibilidad:** una acción nueva es un `record` que hereda de `RadialAction` e implementa `GetProblems()`. Ni el validador ni los modelos existentes cambian. La serialización polimórfica sí necesitará registrarla (fase 5).
+
+**Profundidad:** `MaxDepth` cuenta los menús apilados, raíz incluida. Con 3: raíz → submenú → sub-submenú.
+
+### 14.3 Geometría (`Radial.Core.Geometry`)
+
+- `RadialGeometry`: funciones puras. `NormalizeDegrees`, `DirectionFromAngle`, `CenterAngle`, `AngleDifference`, `TryGetAngle` y `Select(origen, cursor, zonaMuerta)`.
+- Fórmula en la sección 5. Convenciones fijadas y probadas:
+  - Los límites son `[inicio, fin)`: 22.5° pertenece al noreste, 337.5° al norte.
+  - Zona muerta: `distancia < radio` no selecciona. Una distancia **igual** al radio ya selecciona.
+  - El vector nulo no selecciona nunca, ni siquiera con radio 0.
+  - NaN, infinitos y radios negativos lanzan `ArgumentOutOfRangeException`. El cálculo usa `double.Hypot`, así que distancias enormes no desbordan.
+- **Límite exacto y coma flotante:** con coordenadas de píxel un límite exacto es inalcanzable. Un punto a un ulp del límite puede caer en cualquiera de los dos lados. Las pruebas usan ±0.01° y no afirman nada más fino.
+- `SectorSelector`: histéresis, separada de la geometría básica. Conserva el sector actual mientras el ángulo del cursor esté a menos de `22.5° + margen` de su centro. Al entrar desde la zona muerta no hay histéresis. **El margen debe estar en `[0, 22.5)`**: con 22.5° o más, el sector vecino no se podría alcanzar sin pasar de su propio centro. El constructor y el validador lo rechazan.
+
+### 14.4 Motor (`Radial.Core.Engine`)
+
+`RadialEngine(configuración, reloj)`. Valida la configuración al construirse y lanza `InvalidConfigurationException` si hay errores. No es seguro entre hilos: quien lo use serializa las llamadas.
+
+| Operación | Efecto |
+|---|---|
+| `Start(origen)` | Activa el menú raíz con el centro en `origen`, sin selección. Si ya estaba activo, **reinicia** la interacción. |
+| `UpdatePointer(punto)` | Recalcula la selección y evalúa los tiempos. Inactivo: se ignora. |
+| `Tick()` | Evalúa los tiempos sin mover el cursor. Inactivo: se ignora. |
+| `Confirm()` | Devuelve `RadialResult` y vuelve a inactivo. Inactivo: `NotActive`, sin efectos. |
+| `Cancel()` | Limpia todo y vuelve a inactivo. |
+
+Estado observable: `IsActive`, `CurrentMenu`, `NavigationStack`, `Origin`, `Pointer`, `SelectedDirection`, `SelectedItem`, `SubmenuProgress`, `BackProgress`, `IsBackArmed`.
+
+`Confirm()` devuelve `Execute(item)` solo si hay un elemento seleccionado que **no** sea un grupo. En otro caso devuelve `Cancelled` con motivo `NoSelection`, `EmptySlot` o `GroupNotEntered`. El motor nunca ejecuta nada.
+
+**Tiempo:** `IClock.Now` es un `TimeSpan` monotónico. Los tiempos se evalúan en cada `UpdatePointer` y `Tick`, así que el submenú se abre al llegar a `SubmenuDwell` aunque nadie llame a `Tick`. `Confirm()` no evalúa tiempos: si se suelta sobre un grupo antes de la última lectura que completa el dwell, se cancela. No hay `Thread.Sleep` ni `DateTime`.
+
+### 14.5 Navegación entre menús
+
+```
+Idle ──Start──▶ Active[main]
+   Hover(grupo) ──permanencia ≥ SubmenuDwell──▶ Push(submenú):
+        origen := cursor · selección := ninguna · IsBackArmed := false · progresos := 0
+   Fuera del centro ──▶ IsBackArmed := true
+   Centro + IsBackArmed + profundidad ≥ 2 ──permanencia ≥ BackDwell──▶ Pop:
+        origen := cursor · selección := ninguna · IsBackArmed := false · progresos := 0
+```
+
+- Cambiar de sector, pasar al centro o salir del grupo reinicia `SubmenuProgress`. Moverse dentro del mismo sector no.
+- Salir del centro cancela la espera de retroceso y la reinicia al volver.
+- En la raíz no hay retroceso.
+- No se entra en un submenú si la pila ya tiene `MaxDepth` menús o si el destino ya está en la pila. Una configuración validada nunca lo provoca; es una defensa adicional.
+
+### 14.6 Validador (`Radial.Core.Validation`)
+
+`ConfigurationValidator.Validate(configuración)` no lanza por contenido inválido y devuelve **todos** los problemas con `Severity`, `Code` estable, `Message` y `Path` (por ejemplo `menus[work].items[notes].action`). Los mensajes están en español y no se prueban; las pruebas usan los códigos.
+
+Comprueba: raíz vacía o inexistente; identificadores vacíos, demasiado largos o duplicados (menús, y elementos en toda la configuración); nombres vacíos o de más de 64 caracteres; posiciones inválidas o duplicadas; iconos; acciones ausentes o con datos obligatorios vacíos; URLs que no sean absolutas `http`, `https` o `mailto`; referencias a submenús inexistentes; **ciclos** (incluso entre menús inalcanzables); profundidad por encima de `MaxDepth`; zona muerta, histéresis, tiempos (50 ms a 10 s) y profundidad (1 a 10) fuera de rango. Un menú inalcanzable desde la raíz es una **advertencia**, no un error.
+
+El análisis del grafo es iterativo: una cadena de 50 000 menús no desborda la pila (hay una prueba). La búsqueda de referencias usa conjuntos, no listas: una primera versión era cuadrática y tardaba 33 s con esa prueba, ahora tarda milisegundos.
+
+### 14.7 Cambios de diseño respecto a la v0.3
+
+| Cambio | Motivo |
+|---|---|
+| `DeadZoneRadius` debe ser **mayor que 0** en la configuración. | Con 0, el retroceso solo se activaría con el cursor exactamente en el píxel del origen. La función geométrica sí admite 0. |
+| La normalización usa `%` con corrección. | El resto de coma flotante es exacto; la fórmula con `floor` no lo es con ángulos enormes. |
+| Serialización y acciones desconocidas pasan a la fase 5. | Aún no existe almacenamiento; implementarlas ahora sería código sin usar. |
+| `Start` en estado activo reinicia en vez de lanzar excepción. | Más tolerante con la capa de entrada, que podría duplicar una activación. |
+| No hay reloj de producción en Core todavía. | Nadie lo usa hasta la fase 3 o 4. |
+
+### 14.8 Pruebas
+
+**253 pruebas en verde** (252 en Core, 1 en Windows), ~0.5 s en total, todas con reloj simulado.
+
+| Archivo | Cubre |
+|---|---|
+| `RadialGeometryTests` | 8 direcciones (ejes y diagonales exactos), 8 límites a ±0.01°, límites exactos, ángulos negativos y múltiplos de 360, `-0.0`, `-1e-20`, ángulos enormes, vector nulo, zona muerta justo dentro, en el radio y fuera, barrido de 3600 ángulos contra una tabla independiente, NaN e infinitos. |
+| `SectorSelectorTests` | Cambio normal, margen, oscilación y *jitter* en la frontera, cruce de 0°/360°, entrada desde la zona muerta, margen 0 equivalente a la geometría sin estado, márgenes extremos, todos los pares de sectores alcanzables, márgenes inválidos. |
+| `RadialEngineLifecycleTests` | Inicio, selección en las 8 direcciones, posición vacía, confirmación (ejecutable, sin selección, vacía), cancelación, doble inicio, operaciones inactivas, limpieza, valores no finitos, configuración inválida. |
+| `RadialEngineNavigationTests` | Progreso gradual, apertura exacta a los 500 ms, apertura sin `Tick`, recentrado, reinicios, soltar antes de completar, armado del retroceso, retroceso exacto a los 400 ms, tres niveles, raíz sin retroceso. |
+| `ConfigurationValidatorTests` | Todos los códigos de error y casos límite aceptados. |
+| `RadialModelTests`, `ArchitectureTests` | Modelo; Core sin referencias a Windows o WPF y sin P/Invoke. |
+
+**Mutaciones comprobadas a mano** (se introdujo cada fallo y se confirmó que las pruebas lo detectan; después se restauró el código): `>=` por `>` en la permanencia (18 pruebas fallan), `<` por `<=` en la zona muerta (1), histéresis sin margen (7), retroceso siempre armado (11), sin recentrado (3).
+
+### 14.9 Limitaciones conocidas
+
+- Los bordes de pantalla (E-1) siguen abiertos. El motor trabaja con el origen que le dan.
+- La zona muerta está en las unidades del cursor. Quien lo integre debe escalarla con el DPI.
+- `NavigationStack` es una vista en vivo, no una copia; la interfaz debe leerla en el mismo hilo.
+- No hay límite al número de menús o elementos. Es aceptable para la validación (lineal), pero la importación (fase 8) deberá limitar el tamaño del archivo.

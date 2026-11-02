@@ -72,6 +72,22 @@ dotnet test -c Release
 dotnet run --project src/Radial.App
 ```
 
+## Núcleo (`Radial.Core`) — implementado en la fase 1
+
+- `Geometry`: `RadialGeometry` (funciones puras), `SectorSelector` (histéresis, margen en `[0, 22.5)`), `RadialDirection`, `PointD`.
+- `Model`: `MenuId`/`ItemId` tipados, `RadialConfiguration`, `RadialMenu`, `RadialItem`, `RadialAction` y sus derivadas (solo datos).
+- `Engine`: `RadialEngine` (`Start`, `UpdatePointer`, `Tick`, `Confirm`, `Cancel`), `RadialResult`. Nunca ejecuta acciones.
+- `Validation`: `ConfigurationValidator`, códigos estables en `ValidationCodes`. Las pruebas comprueban códigos, no mensajes.
+- `Timing`: `IClock` monotónico. Las pruebas usan `ManualClock`; nunca esperas reales.
+
+Convenciones del núcleo:
+- Un tipo de acción nuevo = un `record` que hereda de `RadialAction` e implementa `GetProblems()`.
+- `MaxDepth` cuenta los menús apilados, raíz incluida (3 = raíz + 2 niveles).
+- `DeadZoneRadius` > 0 y `HysteresisDegrees` en `[0, 22.5)` en la configuración.
+- `Start` con el motor activo reinicia la interacción; `Confirm`/`UpdatePointer`/`Tick` inactivo se ignoran.
+- Los mensajes de validación están en español; los identificadores y los códigos, en inglés.
+- Recorridos de grafos iterativos (la configuración importada no es de confianza). Búsquedas por conjunto, no por lista.
+
 ## Estado
 
-Ver la sección de fases del documento técnico. Fase 0 completada; esperar aprobación para la fase 1.
+Fases 0 y 1 completadas (253 pruebas en verde). Esperar aprobación para la fase 2. Ver las secciones 12 y 14 del documento técnico.
