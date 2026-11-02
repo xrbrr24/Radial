@@ -12,7 +12,9 @@ Documento de referencia: [docs/technical-design.md](docs/technical-design.md). S
 - No escribir código ficticio ni de demostración para lo que aún no existe. La excepción es el spike de la fase 2 (`spikes/`, desechable, fuera de `Radial.sln`).
 - Una fase no está terminada hasta que compila y se ha comprobado que funciona.
 - No tocar nada fuera de `C:\Coding\Radial`.
-- Sin coste: nada de APIs de pago, cloud, servidores, cuentas ni licencias comerciales. Todo local.
+- Sin coste: nada de APIs de pago, cloud, servidores, cuentas ni licencias comerciales. Todo local. No adquirir certificados de firma ni servicios de pago sin autorización expresa.
+- **Smart App Control (en modo de aplicación en el equipo de desarrollo) bloqueó el spike** (`0x800711C7`). **No desactivarlo, no tocar políticas de seguridad, no crear excepciones ni buscar formas de eludirlo.** Si un binario se bloquea, parar e informar. No se afirma que todas las compilaciones sin firmar se bloqueen. Firma de código y confianza: evaluar en la fase 8 (sección 15 del documento técnico).
+- **No volver a ejecutar `spikes/Radial.BlurSpike`.** Los datos válidos están en `spikes/Radial.BlurSpike/results/run1-*`; no borrarlos. El código añadido tras `run1` (B2, experimento de activación, `RegionLog`, `--only`, `run.log`) compila pero **no está validado** y está marcado `NO VALIDADO`.
 
 ## Tecnología y compatibilidad
 
@@ -30,7 +32,7 @@ Radial.Core.Tests ──▶ Core        Radial.Windows.Tests ──▶ Windows, 
 ```
 
 - `Radial.Core` (`net10.0`): lógica pura, sin Windows ni WPF. Casi todas las pruebas viven aquí.
-- `Radial.Windows` (`net10.0-windows`, sin WPF): hooks, SendInput, DWM, DPI, ejecutores, almacenamiento en disco. **Nunca `Radial.Infrastructure`.**
+- `Radial.Windows` (`net10.0-windows`, sin WPF): hooks, SendInput, DPI y monitores, ejecutores, almacenamiento en disco. **Nunca `Radial.Infrastructure`.**
 - `Radial.App` (`net10.0-windows`, WPF): único proyecto con WPF. Composición, overlay, ajustes, bandeja.
 - Sin lógica de negocio en código de interfaz. Evitar clases gigantes y sobreingeniería.
 
@@ -52,12 +54,21 @@ Radial.Core.Tests ──▶ Core        Radial.Windows.Tests ──▶ Windows, 
 - Teclas y botones: eventos críticos, en orden y sin pérdidas. Movimientos: coalescidos.
 - La máquina de estados es la fuente de verdad de las transiciones. **No usar `GetAsyncKeyState` dentro de los callbacks** para conocer la transición que acaba de ocurrir.
 - Windows puede eliminar un hook en silencio. **No prometer recuperación automática.**
+- Implementado en la fase 3 (`Radial.Windows/Input` y `/Hooks`): `GlobalInputService` (API pública), `LowLevelHookHost` (hilo dedicado), `ChordTracker` (lógica pura), `HookMessages` (mapeo puro). Eventos críticos por un `Channel` sin límite (lector único); movimientos en `LatestPointer` (coalescidos).
+- **El watchdog NO comprueba el botón central con `GetAsyncKeyState`: no refleja un evento consumido por un hook (medido).** Solo vigila Ctrl y que el hook de ratón siga entregando movimiento. No hay detección del hook de teclado eliminado ni de la liberación perdida del botón central.
+- Ctrl nunca se consume; el botón central solo si activa (y su liberación siempre); Escape solo si cancela un gesto activo; movimiento y rueda nunca. Todo evento inyectado se ignora; solo con `AcceptOwnSyntheticInput` (autoprueba) se aceptan los inyectados **con la marca de Radial** (`dwExtraInfo`, 32 bits: el hook de ratón trunca el valor, medido), nunca los de otras aplicaciones.
+- **Autoprueba con entrada sintética** (`Radial.App.exe --selftest <archivo>`): valida los hooks reales con `SendInput`, **no sustituye** la prueba con hardware. Toda inyección pasa por `GuardedSyntheticInput` (`SyntheticInput` es interno): antes de **cada** envío comprueba cursor, `WindowFromPoint` y `GetForegroundWindow`, y recuerda qué pulsó para liberar solo eso. Reduce el riesgo, **no es atómico** (ver documento técnico 16.9). La limpieza es síncrona y la prueba es cancelable (`CancellationToken`); cerrar la ventana a mitad la cancela y aplaza el cierre. No restaurar el cursor del usuario antes de terminar de inyectar. **No inyectar entrada con programas auxiliares fuera de Radial** (ni siquiera para depurar): un fallo de activación del gesto puede dejar pasar Ctrl+Escape (menú Inicio) a otras aplicaciones.
+- Un segundo `GlobalInputService` en el proceso no instala hooks: `Start` devuelve `Success = false` y el estado queda `Faulted` (nunca `Starting`).
+- Reanudar o desbloquear solo deja un aviso: no se reinstalan los hooks.
 
 ## DPI y overlay
 
 - `PerMonitorV2` (ver `app.manifest`). No usar `GetDpiForMonitor`; usar `GetDpiForWindow`, `VisualTreeHelper.GetDpi` y gestionar `WM_DPICHANGED`.
-- Overlay: no activable, transparente a clics, sin robar el foco.
-- Blur: solo si el spike de la fase 2 lo avala. Si no es fiable, panel translúcido oscuro sin blur. La estabilidad prima sobre los efectos.
+- **Overlay (ADR-001, aceptado): ventana layered de WPF** — `AllowsTransparency=true`, fondo oscuro translúcido, forma circular, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, `WS_EX_TRANSPARENT` para el click-through, `Topmost`, mostrar sin activar. Se crea una vez al arrancar. Hay que comprobar que transparencia, click-through y no activación funcionan **a la vez**.
+- **Sin blur.** No usar Acrylic, Mica ni técnicas DWM (`DWMWA_SYSTEMBACKDROP_TYPE`, `SetWindowRgn` sobre material) en producción. **`SetWindowCompositionAttribute` no es una API pública documentada: no se usa.** La captura de pantalla + `BlurEffect` (variante E) está archivada como posible experimento futuro: no implementarla ni depender de ella. El desenfoque no es requisito del MVP.
+- `WM_NCHITTEST → HTTRANSPARENT` no deja pasar el clic a otro proceso: no usarlo.
+- La investigación de la fase 2 fue **parcial**: un monitor al 125 %, una ejecución. DPI 100/150/200 %, varios monitores, cambio de monitor, `WM_DPICHANGED` real y Windows 11 estable 25H2 siguen **pendientes de validar**; no afirmar que están probados.
+- Las causas de los resultados de las variantes B, C y D **se desconocen**. No presentarlas como explicadas.
 
 ## Estética
 
@@ -90,4 +101,6 @@ Convenciones del núcleo:
 
 ## Estado
 
-Fases 0 y 1 completadas (253 pruebas en verde). Esperar aprobación para la fase 2. Ver las secciones 12 y 14 del documento técnico.
+Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. La fase 4 no ha comenzado. Ver las secciones 10, 12, 14, 15 y 16.
+
+Roadmap: fase 3 captura global · fase 4 overlay real (variante A) y acciones · fase 5 submenús y configuración (MVP) · fase 6 ajustes y editor visual · fase 7 apariencia y sistema · fase 8 importar/exportar y distribución.

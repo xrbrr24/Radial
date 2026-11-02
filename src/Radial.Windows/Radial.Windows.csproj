@@ -1,12 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Integración con Windows (hooks, DWM, DPI, SendInput, disco). Sin WPF. -->
+  <!-- Integración con Windows (hooks, DPI, SendInput, disco). Sin WPF. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Lo exige el generador de LibraryImport. El código propio no usa punteros. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Radial.Core\Radial.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Radial.Windows.Tests" />
   </ItemGroup>
 
 </Project>

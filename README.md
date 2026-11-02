@@ -4,7 +4,7 @@ Launcher personalizable basado en menús radiales para Windows 11.
 
 Mantén **Ctrl**, pulsa el **botón central** del ratón, mueve el cursor hacia un sector y suelta el botón para ejecutar una aplicación, archivo, carpeta, URL o atajo de teclado. Los sectores pueden abrir submenús.
 
-> **Estado:** en desarrollo temprano. Completados el esqueleto (fase 0) y el núcleo lógico (fase 1: geometría, motor, submenús y validación). Aún no hay funcionalidad de usuario.
+> **Estado:** en desarrollo temprano. Completados el esqueleto (fase 0), el núcleo lógico (fase 1: geometría, motor, submenús y validación) la investigación del overlay (fase 2, con cobertura parcial: [ADR-001](docs/adr/ADR-001-overlay-rendering.md)) y la captura global de teclado y ratón (fase 3, aprobada). Aún no hay funcionalidad de usuario.
 
 ## Requisitos
 

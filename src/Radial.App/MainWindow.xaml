@@ -1,10 +1,50 @@
 <Window x:Class="Radial.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Radial" Height="240" Width="420"
+        Title="Radial — diagnóstico de captura global (fase 3)" Height="760" Width="760"
         WindowStartupLocation="CenterScreen">
-    <Grid>
-        <TextBlock Text="Radial" FontSize="28"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+            <Button x:Name="StartButton" Content="Iniciar captura" Padding="12,4" Margin="0,0,6,0" Click="OnStart" />
+            <Button x:Name="StopButton" Content="Detener captura" Padding="12,4" Margin="0,0,6,0" Click="OnStop" />
+            <Button Content="Consultar estado" Padding="12,4" Margin="0,0,6,0" Click="OnQuery" />
+            <Button x:Name="CancelButton" Content="Probar cancelación" Padding="12,4" Margin="0,0,6,0" Click="OnCancel" />
+            <Button x:Name="SelfTestButton" Content="Autoprueba (entrada sintética)" Padding="12,4" Click="OnSelfTest" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="1" Margin="0,8,0,8" TextWrapping="Wrap" Foreground="#555"
+                   Text="Gesto: mantén Ctrl, pulsa el botón central, mueve y suelta el botón central. Los eventos inyectados se ignoran; durante la autoprueba solo se aceptan los que lleva la marca de Radial." />
+
+        <Grid Grid.Row="2" x:Name="StateGrid" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+        </Grid>
+
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border x:Name="TestZone" Background="#EEF3FA" BorderBrush="#7A8CA5" BorderThickness="1" Height="64" Margin="0,0,0,8">
+                <TextBlock Text="Zona de prueba: los clics centrales y Escape que llegan a la aplicación se cuentan aquí"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#334" />
+            </Border>
+
+            <TextBox Grid.Row="1" x:Name="EventsBox" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                     VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" Margin="0,0,0,8" />
+            <TextBox Grid.Row="2" x:Name="MessagesBox" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                     VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" />
+        </Grid>
     </Grid>
 </Window>

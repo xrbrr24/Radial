@@ -2,3 +2,7 @@
 *.sln text eol=crlf
 *.png binary
 *.ico binary
+
+# Resultado experimental de la fase 2, conservado byte a byte tal como lo generó el spike (sus líneas acaban en un espacio).
+# Excepción solo para este archivo: no se desactiva la comprobación de espacios en el resto de spikes/ ni de results/.
+spikes/Radial.BlurSpike/results/run1-results.md -whitespace

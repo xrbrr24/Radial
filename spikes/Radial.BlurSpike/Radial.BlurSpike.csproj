@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Prototipo DESECHABLE de la fase 2. No forma parte de Radial.sln ni referencia a Radial.Core/Windows/App.
+    Sin paquetes NuGet. El código de aquí no se reutiliza: solo se conservan las conclusiones (ver README.md y docs/adr).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>Radial.BlurSpike</RootNamespace>
+    <AssemblyName>Radial.BlurSpike</AssemblyName>
+    <!-- P/Invoke con DllImport clásico: es un prototipo, no merece la ceremonia de LibraryImport. -->
+    <NoWarn>$(NoWarn);SYSLIB1054;CA1416</NoWarn>
+  </PropertyGroup>
+
+</Project>
