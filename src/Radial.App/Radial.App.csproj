@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Único proyecto que usa WPF. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Radial.Core\Radial.Core.csproj" />
+    <ProjectReference Include="..\Radial.Windows\Radial.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

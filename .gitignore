@@ -1,0 +1,24 @@
+# Compilación
+[Bb]in/
+[Oo]bj/
+publish/
+artifacts/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+
+# Pruebas y cobertura
+TestResults/
+coverage/
+*.trx
+
+# Logs y temporales
+*.log
+*.tmp
+
+# Claude Code: configuración local de cada máquina
+.claude/settings.local.json
