@@ -143,7 +143,12 @@ public class OpenUrlActionExecutorTests
         Assert.Null(request);
         Assert.Equal(ActionExecutionStatus.Failed, failure!.Status);
         Assert.Equal(ActionErrorCodes.UrlNotAllowed, failure.Error!.Code);
-        Assert.DoesNotContain(url.Length > 0 ? url : "\u0001", failure.Error.Message);
+        // La dirección rechazada no debe aparecer en el mensaje (comparación ordinal). Con "" no hay nada que filtrar:
+        // toda cadena contiene la vacía, así que solo se comprueba cuando hay texto.
+        if (url.Length > 0)
+        {
+            Assert.DoesNotContain(url, failure.Error.Message, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
