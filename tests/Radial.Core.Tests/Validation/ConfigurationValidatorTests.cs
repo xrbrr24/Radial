@@ -227,6 +227,7 @@ public class ConfigurationValidatorTests
         new OpenUrlAction("javascript:alert(1)"),
         new OpenUrlAction("file:///C:/Windows/System32/cmd.exe"),
         new OpenUrlAction("ftp://example.com/x"),
+        new OpenUrlAction("mailto:someone@example.com"), // admitido hasta la fase 4, paso 3: ahora solo http y https
         new SendKeysAction(null!),
         new SendKeysAction(new KeyChord(KeyModifiers.Control, "")),
         new SendKeysAction(new KeyChord(KeyModifiers.Control, "Ctrl C")),
@@ -252,7 +253,6 @@ public class ConfigurationValidatorTests
         new OpenFolderAction(@"C:\Docs"),
         new OpenUrlAction("https://example.com/path?q=1"),
         new OpenUrlAction("HTTP://EXAMPLE.COM"),
-        new OpenUrlAction("mailto:someone@example.com"),
         new SendKeysAction(new KeyChord(KeyModifiers.None, "F5")),
         new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, "T")),
         new OpenMenuAction(TestConfigs.Media),

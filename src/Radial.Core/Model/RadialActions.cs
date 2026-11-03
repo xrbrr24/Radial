@@ -20,7 +20,12 @@ public sealed record OpenFolderAction(string Path) : RadialAction
 
 public sealed record OpenUrlAction(string Url) : RadialAction
 {
-    private static readonly string[] AllowedSchemes = [Uri.UriSchemeHttp, Uri.UriSchemeHttps, Uri.UriSchemeMailto];
+    /// <summary>
+    /// Esquemas que se pueden abrir: <c>http</c> y <c>https</c>. ÚNICA definición: la usa la validación de aquí y la comprobación
+    /// defensiva que repite el ejecutor de Radial.Windows justo antes de lanzar. <c>mailto:</c>, <c>javascript:</c>, <c>file:</c>,
+    /// <c>data:</c> y cualquier otro esquema se rechazan. Ampliarla es una decisión de diseño.
+    /// </summary>
+    public static IReadOnlyList<string> AllowedSchemes { get; } = Array.AsReadOnly([Uri.UriSchemeHttp, Uri.UriSchemeHttps]);
 
     public override IEnumerable<string> GetProblems()
     {

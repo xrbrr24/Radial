@@ -1,6 +1,6 @@
-# Radial — Documento técnico v0.11
+# Radial — Documento técnico v0.12
 
-Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: solo se han hecho sus pasos 1 y 2** (contratos de ejecución de acciones y reloj de producción; parser de atajos; sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (pasos 1 y 2 de la fase 4); todo lo demás sigue siendo diseño.
+Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: se han hecho sus pasos 1 y 2 y está escrito el paso 3 (ejecutores de aplicación, archivo, carpeta y URL), este último SIN VERIFICAR: Smart App Control bloqueó las pruebas de Windows y de Core del paso 3; ver 17.8** (contratos de ejecución de acciones y reloj de producción; parser de atajos; ejecutores; sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (pasos 1 a 3 de la fase 4); todo lo demás sigue siendo diseño.
 
 Convención: **[Comprobado]** = verificado con documentación oficial o en este equipo. **[Por validar]** = propuesta que debe confirmarse con un prototipo o prueba.
 
@@ -9,7 +9,8 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 | Versión | Cambios |
 |---|---|
 | v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
-| **v0.11** | Corrección del paso 2: el vocabulario de teclas de un atajo (66 nombres) tiene **una única fuente de verdad en `Radial.Core`** (`KeyVocabulary`). `SendKeysAction` lo usa para validar y `ShortcutParser` (Windows) solo asigna códigos VK y `Extended`; se acabó la incoherencia entre validar y poder ejecutar (17.6). Se eliminó `SendKeysAction.MaxKeyLength`. La fase 4 no está aprobada. |
+| **v0.12** | Fase 4, **paso 3** (de varios): `IProcessLauncher`, `ShellProcessLauncher` y los ejecutores de aplicación, archivo, carpeta y URL en `Radial.Windows` (17.7). **`OpenUrlAction` solo admite `http` y `https`** (se retira `mailto:`), con una única definición en Core (`OpenUrlAction.AllowedSchemes`). Códigos de error nuevos: `TargetNotFound`, `LaunchFailed`, `UrlNotAllowed`. **Verificación incompleta:** Smart App Control bloqueó la carga de `Radial.Windows.Tests.dll` y, tras el ajuste de URL, de `Radial.Core.Tests.dll` (17.8). El paso 3 no está aprobado ni la fase 4. |
+| v0.11 | Corrección del paso 2: el vocabulario de teclas de un atajo (66 nombres) tiene **una única fuente de verdad en `Radial.Core`** (`KeyVocabulary`). `SendKeysAction` lo usa para validar y `ShortcutParser` (Windows) solo asigna códigos VK y `Extended`; se acabó la incoherencia entre validar y poder ejecutar (17.6). Se eliminó `SendKeysAction.MaxKeyLength`. La fase 4 no está aprobada. |
 | v0.10 | Fase 4, **paso 2** (de varios): parser de atajos (`ShortcutParser`) en `Radial.Windows`, con vocabulario cerrado de 66 teclas (17.5). Solo traducción a códigos de tecla virtual: sin envío de teclas, sin P/Invoke, sin cambios en `Radial.Core` ni en la captura global. La fase 4 no está aprobada. |
 | v0.9 | Fase 4, **paso 1** (de varios): contratos de ejecución de acciones (`IActionExecutor`, `ActionExecutionResult`, `ActionErrorCodes`) y reloj de producción (`MonotonicClock`) en `Radial.Core`. Sin ejecutores concretos ni cambios en `Radial.Windows` ni `Radial.App`. La fase 4 no está aprobada. Nueva sección 17. |
 | v0.8 | Fase 3 **aprobada**. Se registra el resultado de la validación manual con hardware y del paso 14 (cierre durante la autoprueba), realizados por el usuario (16.9 y 16.10), y lo que sigue sin validar (16.12). Solo documentación: sin cambios de código respecto a la v0.7. |
@@ -203,7 +204,7 @@ Redibujado solo desde `CompositionTarget.Rendering`. Referencia del spike (varia
 
 1. Límite de tamaño y de profundidad del JSON.
 2. Deserialización a DTO, comprobación de `schemaVersion` y migración.
-3. Validación estructural: posiciones 0–7 sin duplicados, ids únicos, referencias de menú existentes, sin ciclos, profundidad máxima, longitudes, esquemas de URL permitidos (`http`, `https`, `mailto`), rutas bien formadas.
+3. Validación estructural: posiciones 0–7 sin duplicados, ids únicos, referencias de menú existentes, sin ciclos, profundidad máxima, longitudes, esquemas de URL permitidos (`http` y `https`; `mailto` dejó de admitirse en la fase 4, paso 3, ver 17.7), rutas bien formadas.
 4. `ValidationReport` y resumen de acciones al usuario, con atención a ejecutables y atajos. Las `UnknownAction` se listan como no ejecutables.
 5. Solo si no hay errores: copia de la configuración activa y aplicación. Nunca se ejecuta nada durante la validación.
 
@@ -447,7 +448,7 @@ Idle ──Start──▶ Active[main]
 
 `ConfigurationValidator.Validate(configuración)` no lanza por contenido inválido y devuelve **todos** los problemas con `Severity`, `Code` estable, `Message` y `Path` (por ejemplo `menus[work].items[notes].action`). Los mensajes están en español y no se prueban; las pruebas usan los códigos.
 
-Comprueba: raíz vacía o inexistente; identificadores vacíos, demasiado largos o duplicados (menús, y elementos en toda la configuración); nombres vacíos o de más de 64 caracteres; posiciones inválidas o duplicadas; iconos; acciones ausentes o con datos obligatorios vacíos; URLs que no sean absolutas `http`, `https` o `mailto`; referencias a submenús inexistentes; **ciclos** (incluso entre menús inalcanzables); profundidad por encima de `MaxDepth`; zona muerta, histéresis, tiempos (50 ms a 10 s) y profundidad (1 a 10) fuera de rango. Un menú inalcanzable desde la raíz es una **advertencia**, no un error.
+Comprueba: raíz vacía o inexistente; identificadores vacíos, demasiado largos o duplicados (menús, y elementos en toda la configuración); nombres vacíos o de más de 64 caracteres; posiciones inválidas o duplicadas; iconos; acciones ausentes o con datos obligatorios vacíos; URLs que no sean absolutas `http` o `https` (en la fase 1 también se admitía `mailto`; se retiró en la fase 4, paso 3, ver 17.7); referencias a submenús inexistentes; **ciclos** (incluso entre menús inalcanzables); profundidad por encima de `MaxDepth`; zona muerta, histéresis, tiempos (50 ms a 10 s) y profundidad (1 a 10) fuera de rango. Un menú inalcanzable desde la raíz es una **advertencia**, no un error.
 
 El análisis del grafo es iterativo: una cadena de 50 000 menús no desborda la pila (hay una prueba). La búsqueda de referencias usa conjuntos, no listas: una primera versión era cuadrática y tardaba 33 s con esa prueba, ahora tarda milisegundos.
 
@@ -762,9 +763,9 @@ Lo siguiente **no se ha comprobado** y no debe darse por probado:
 - Comportamiento bajo carga prolongada; eliminación del hook de teclado por Windows (sin detección).
 - Smart App Control: no hubo bloqueos en la fase 3, pero no demuestra que no ocurran en otro equipo o compilación (15.3).
 
-## 17. Fase 4 (en curso): pasos 1 y 2
+## 17. Fase 4 (en curso): pasos 1 a 3
 
-**Estado: solo los pasos 1 y 2 de la fase 4 están implementados. La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Ninguno de los dos pasos es visible para el usuario: el primero define contratos y un reloj, el segundo una traducción de teclas; no se ejecuta ni se envía nada. Los apartados 17.1 a 17.4 son el paso 1 y el 17.5 es el paso 2.
+**Estado: los pasos 1 y 2 de la fase 4 están implementados y verificados; el paso 3 está implementado y compila, pero SIN VERIFICAR (17.8). La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Ningún paso es visible para el usuario todavía: los ejecutores del paso 3 existen, pero nada los invoca (no hay coordinador ni overlay). Los apartados 17.1 a 17.4 son el paso 1, el 17.5 y el 17.6 el paso 2 y su corrección, y el 17.7 y el 17.8 el paso 3.
 
 ### Paso 1: contratos de ejecución de acciones y reloj de producción
 
@@ -872,3 +873,54 @@ Decisiones y observaciones:
 - Windows, `KeyVocabularyConsistencyTests`: el parser admite exactamente los nombres de Core; cada nombre de Core se traduce en cualquier grafía; el parser y Core coinciden en cada candidato (los nombres en tres grafías, con espacios, todos los caracteres sueltos hasta U+017F, Space, Delete, Ñ, nulo…); una acción valida si y solo si se traduce.
 - Las 191 pruebas del parser (códigos VK y `Extended`) siguen pasando **sin modificarlas**.
 - Mutaciones hechas a mano y revertidas: añadir `Space` solo en Core (fallan Core y Windows), volver a la validación antigua (fallan 68 en Core y 5 en Windows), quitar la tabla de `ArrowUp` en Windows (fallan 106 en Windows).
+
+### 17.7 Paso 3: ejecutores de aplicación, archivo, carpeta y URL
+
+**Estado: escrito y compila (0 advertencias, 0 errores). NO verificado: ver 17.8.** Nada invoca todavía a estos ejecutores (no hay coordinador).
+
+**Piezas en `Radial.Windows/Actions`** (públicas, para que `Radial.App` las componga a mano):
+
+| Pieza | Función |
+|---|---|
+| `IProcessLauncher`, `ProcessLaunchRequest`, `ProcessLaunchResult` | Lo único que los ejecutores necesitan del sistema, y lo que las pruebas sustituyen. La solicitud lleva **destino, argumentos y directorio de trabajo por separado**. El resultado es `Started`, `TargetNotFound` o `Failed` (con el código nativo). Un fallo previsible se devuelve, no se lanza. La cancelación solo se atiende **antes** de iniciar: una vez iniciado, no se informa de una cancelación. `Started` significa que el sistema aceptó el lanzamiento, no que el programa llegara a mostrarse. |
+| `ShellProcessLauncher` | Implementación real: `Process.Start` con `UseShellExecute = true`, en un hilo del pool (`ShellExecute` puede bloquear). **Nunca** `cmd.exe`, PowerShell ni scripts. Traduce `Win32Exception` 2 y 3 (y `FileNotFoundException`) a `TargetNotFound`, el resto de errores del sistema y `InvalidOperationException` a `Failed`, y deja pasar cualquier otra excepción (error de programa). La función de arranque es inyectable (interno) para probarlo sin iniciar procesos. |
+| `ProcessActionExecutor<TAction>` | Esqueleto común. Orden fijo: tipo no admitido (`UnsupportedAction`) → token cancelado (`Cancelled`) → `GetProblems()` de Core no vacío (`InvalidAction`, sin pedir lanzamiento; la validación **no se repite**, se reutiliza) → comprobaciones propias del tipo → última comprobación de cancelación → lanzamiento → traducción del resultado. Nunca se da por bueno un lanzamiento antes de que el lanzador lo confirme. Los mensajes no incluyen rutas ni direcciones. |
+| `LaunchApplicationActionExecutor` | Pasa `Path`, `Arguments` y `WorkingDirectory` tal cual y separados. **No** comprueba que el archivo exista: un nombre sin ruta lo resuelve el sistema y, si no lo encuentra, lo informa el lanzador (`TargetNotFound`). |
+| `OpenFileActionExecutor` | Comprueba que el archivo existe (`File.Exists`: una carpeta no es un archivo) y lo abre con la asociación del sistema. No interpreta la extensión. |
+| `OpenFolderActionExecutor` | Comprueba que la ruta es una carpeta existente (`Directory.Exists`: un archivo no es una carpeta) y la abre con el sistema. |
+| `OpenUrlActionExecutor` | Repite, de forma independiente y justo antes de lanzar, que la dirección es absoluta, tiene host y su esquema está permitido; lanza la forma analizada (`Uri.AbsoluteUri`). Falla con `UrlNotAllowed`. |
+
+**Códigos de error nuevos** (`ActionErrorCodes`, solo situaciones reales que se distinguen): `TargetNotFound` (el destino no existe), `LaunchFailed` (el sistema rechazó abrirlo: sin asociación, acceso denegado, elevación cancelada...) y `UrlNotAllowed` (la comprobación defensiva de la URL). Se reutilizan `UnsupportedAction` e `InvalidAction`.
+
+**Decisión: `OpenUrlAction` solo admite `http` y `https`.** El modelo admitía también `mailto:` (secciones 7.2 y 14.6 de versiones anteriores), pero la ejecución de la fase 4 es solo http y https; con los dos criterios distintos, una acción `mailto:` validaba en Core y no se podía ejecutar (la misma incoherencia que se corrigió con las teclas en 17.6). Ahora hay **una única definición**, `OpenUrlAction.AllowedSchemes` en Core: la usa `GetProblems()` (todo lo demás, incluidos `mailto:`, `javascript:`, `file:`, `data:`, esquemas desconocidos, direcciones relativas y mal formadas, se rechaza al validar) y la reutiliza el ejecutor de Windows en su comprobación defensiva. Ampliarla es una decisión de diseño. Pruebas modificadas por este cambio: `ConfigurationValidatorTests` (`mailto:` pasa de las acciones válidas a las inválidas) y la prueba de Windows que fijaba la discrepancia.
+
+**Revisión estática** (hecha porque las pruebas de Windows no se pueden ejecutar; resultado detallado en 17.8):
+- Sin `cmd`, PowerShell ni scripts: aparecen solo en comentarios que dicen que no se usan. El único `Process.Start` de Radial es el valor por defecto del constructor público de `ShellProcessLauncher`; ninguna prueba usa ese constructor.
+- Sin concatenación: destino, argumentos y directorio van en campos distintos de `ProcessStartInfo`; los argumentos se pasan como los escribió el usuario, sin interpretarlos.
+- Ningún camino devuelve éxito sin que el lanzador confirme `Started`.
+- No se corrigió ningún defecto de código por esta revisión.
+- **Riesgos residuales (no son defectos respecto a los requisitos de este paso, pero hay que decidirlos antes de importar configuraciones, fase 8):**
+  1. `LaunchApplicationAction` acepta como destino cualquier texto no vacío, incluido uno que parezca un identificador de protocolo (`ms-settings:`, etc.): `ShellExecute` lo despacharía a su controlador. No se restringió porque no era un requisito; una configuración importada no es de confianza.
+  2. `OpenFileAction` con una ruta a un ejecutable o un script lo **ejecuta Windows** a través de su asociación. Radial no interpreta la extensión, pero tampoco la bloquea.
+  3. Las rutas relativas y las variables de entorno no se resuelven (fuera del alcance de la fase): `File.Exists` y `Directory.Exists` resolverían una ruta relativa contra el directorio actual del proceso, que en una aplicación de bandeja es impredecible.
+
+### 17.8 Paso 3: verificación y limitación del entorno de validación
+
+**No se dispone de evidencia suficiente para aprobar el paso 3.** Las pruebas de Windows nunca se han ejecutado y las de Core no se han ejecutado sobre el código actual.
+
+| Qué | Resultado |
+|---|---|
+| Compilación (`dotnet build -c Release`) | **Correcta**: 0 advertencias, 0 errores, incluidos los proyectos de pruebas |
+| Pruebas de Core, **antes** del ajuste de URL | 571 pruebas superadas (las 568 anteriores y 3 nuevas de códigos de error). Ejecución previa al bloqueo |
+| Pruebas de Core, **con el código actual** (ajuste de URL) | **No ejecutadas**: Smart App Control bloqueó `Radial.Core.Tests.dll` recién compilado |
+| Pruebas de Windows (las 348 anteriores y todas las del paso 3) | **No ejecutadas**: Smart App Control bloqueó `Radial.Windows.Tests.dll` |
+| Revisión estática de los ejecutores | Hecha (17.7); no sustituye a las pruebas |
+
+**El bloqueo es una limitación del entorno de validación, no un fallo de las pruebas.** Detalle: `dotnet test` termina con `FileLoadException 0x800711C7` («An Application Control policy has blocked this file»). El registro de Code Integrity (eventos 3077 y 3033) dice que `testhost.exe` intentó cargar `Radial.Windows.Tests.dll` (08:50) y después `Radial.Core.Tests.dll` (09:11) y que «no cumplían los requisitos de nivel de firma Enterprise»; identificador de política `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`. Los dos binarios eran compilaciones nuevas sin firmar. Es el riesgo descrito en 15.3: el mismo proyecto de pruebas de Core cargó sin problema minutos antes con otra compilación. No se conoce la causa de la diferencia.
+
+**Qué no se hizo, a propósito (15.2):** no se desactivó Smart App Control, no se tocaron políticas, no se crearon excepciones, no se modificaron firmas ni nombres ni opciones de compilación, no se repitieron compilaciones para conseguir que se cargara un binario y no se volvieron a lanzar las pruebas de Windows. Tras el bloqueo del binario de Core solo se repitió `dotnet test` sobre el mismo binario, sin recompilar.
+
+**Qué falta para verificar el paso 3 (sin validar):**
+- Ejecutar las pruebas de Windows (348 anteriores y todas las nuevas) y las de Core con el código actual, en un entorno donde se puedan cargar: otro equipo o una compilación firmada. La firma de código se evalúa en la fase 8 (15.2), con la restricción de coste.
+- Algunas pruebas nuevas dependen de cómo analiza .NET ciertas direcciones (p. ej. `http://exa mple.com` o `https://[no-es-ipv6` como mal formadas); si alguna falla al ejecutarse, es una expectativa de la prueba que hay que revisar, no necesariamente un defecto del ejecutor. Se retiraron dos entradas cuya expectativa no se podía respaldar (`http:///solo-ruta`, `http:/example`).
+- Validación manual del lanzador real (`ShellProcessLauncher` solo se ha probado con el arranque inyectado): abrir una aplicación, un archivo, una carpeta y una dirección web en un equipo donde se pueda ejecutar, y comprobar los fallos (destino inexistente, archivo sin aplicación asociada).

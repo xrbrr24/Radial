@@ -1,0 +1,104 @@
+name: Radial - validacion en Windows
+
+# Compila la solucion completa y ejecuta las dos suites de pruebas en un runner Windows de GitHub, independiente del equipo de
+# desarrollo (donde Smart App Control bloquea la carga de los ensamblados de pruebas, ver docs/technical-design.md 17.8).
+# No cambia ninguna opcion de compilacion, no firma nada y no ejecuta aplicaciones: las pruebas usan lanzadores falsos.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - validation/fase-4-paso-3
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  validate:
+    name: Compilar y probar (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar el SDK de .NET indicado en global.json
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Mostrar el SDK en uso
+        run: dotnet --list-sdks
+
+      - name: Restaurar
+        run: dotnet restore Radial.sln
+
+      - name: Compilar la solucion completa (Release)
+        id: build
+        run: dotnet build Radial.sln -c Release --no-restore
+
+      # Las dos suites se ejecutan siempre que la compilacion haya ido bien, aunque la anterior falle: un fallo de Core no
+      # oculta el resultado de Windows. Cualquier paso fallido hace fallar el trabajo; nada se marca como "continuar si falla".
+      - name: Pruebas de Radial.Core.Tests
+        id: core
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: dotnet test tests/Radial.Core.Tests/Radial.Core.Tests.csproj -c Release --no-build --logger "console;verbosity=normal" --logger "trx;LogFileName=core.trx" --results-directory "${{ runner.temp }}/test-results/core"
+
+      - name: Pruebas de Radial.Windows.Tests
+        id: windows
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: dotnet test tests/Radial.Windows.Tests/Radial.Windows.Tests.csproj -c Release --no-build --logger "console;verbosity=normal" --logger "trx;LogFileName=windows.trx" --results-directory "${{ runner.temp }}/test-results/windows"
+
+      - name: Resumen de resultados por suite
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $suites = @(
+            @{ Name = 'Radial.Core.Tests'; Dir = 'core'; Outcome = '${{ steps.core.outcome }}' },
+            @{ Name = 'Radial.Windows.Tests'; Dir = 'windows'; Outcome = '${{ steps.windows.outcome }}' }
+          )
+          $lines = @(
+            '## Resultados de las pruebas',
+            '',
+            '| Suite | Paso | Total | Superadas | Falladas | No ejecutadas |',
+            '|---|---|---|---|---|---|'
+          )
+          foreach ($suite in $suites) {
+            $folder = Join-Path $env:RUNNER_TEMP "test-results/$($suite.Dir)"
+            $trx = Get-ChildItem -Path $folder -Filter '*.trx' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -eq $trx) {
+              $lines += "| $($suite.Name) | $($suite.Outcome) | sin resultados | sin resultados | sin resultados | sin resultados |"
+              continue
+            }
+            $counters = ([xml](Get-Content -LiteralPath $trx.FullName -Raw)).TestRun.ResultSummary.Counters
+            $lines += "| $($suite.Name) | $($suite.Outcome) | $($counters.total) | $($counters.passed) | $($counters.failed) | $($counters.notExecuted) |"
+          }
+          $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $lines | ForEach-Object { Write-Host $_ }
+
+      - name: Subir resultados de Core (TRX)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: resultados-core
+          path: ${{ runner.temp }}/test-results/core
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Subir resultados de Windows (TRX)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: resultados-windows
+          path: ${{ runner.temp }}/test-results/windows
+          if-no-files-found: warn
+          retention-days: 14

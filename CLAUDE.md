@@ -14,6 +14,7 @@ Documento de referencia: [docs/technical-design.md](docs/technical-design.md). S
 - No tocar nada fuera de `C:\Coding\Radial`.
 - Sin coste: nada de APIs de pago, cloud, servidores, cuentas ni licencias comerciales. Todo local. No adquirir certificados de firma ni servicios de pago sin autorización expresa.
 - **Smart App Control (en modo de aplicación en el equipo de desarrollo) bloqueó el spike** (`0x800711C7`). **No desactivarlo, no tocar políticas de seguridad, no crear excepciones ni buscar formas de eludirlo.** Si un binario se bloquea, parar e informar. No se afirma que todas las compilaciones sin firmar se bloqueen. Firma de código y confianza: evaluar en la fase 8 (sección 15 del documento técnico).
+- **Segundo bloqueo (fase 4, paso 3, 2026-11-03):** Smart App Control bloqueó `Radial.Windows.Tests.dll` y, tras el ajuste de URL, `Radial.Core.Tests.dll` (compilaciones nuevas; el mismo proyecto de Core había cargado minutos antes). **No se vuelven a lanzar las pruebas de Windows en este equipo, no se recompila para conseguir que un binario cargue y no se afirma como superado lo que no se ha ejecutado.** Es una limitación del entorno de validación, no un fallo de las pruebas (documento técnico, 17.8).
 - **No volver a ejecutar `spikes/Radial.BlurSpike`.** Los datos válidos están en `spikes/Radial.BlurSpike/results/run1-*`; no borrarlos. El código añadido tras `run1` (B2, experimento de activación, `RegionLog`, `--only`, `run.log`) compila pero **no está validado** y está marcado `NO VALIDADO`.
 
 ## Tecnología y compatibilidad
@@ -68,6 +69,13 @@ Radial.Core.Tests ──▶ Core        Radial.Windows.Tests ──▶ Windows, 
 - `Radial.Windows/Shortcuts/ShortcutParser` solo asigna a cada nombre de `KeyVocabulary.Names` su código VK y su indicador `Extended` (solo las cuatro flechas lo son). Los códigos de Windows **no** viven en Core. Es solo traducción: no envía teclas ni usa P/Invoke.
 - Los modificadores (`KeyModifiers`) pasan sin tocar; validarlos es de `SendKeysAction.GetProblems()`. Una configuración con una tecla fuera del vocabulario se rechaza al validar; el editor (fases 5 y 6) debe ofrecer solo `KeyVocabulary.Names`.
 
+## Ejecutores de acciones (fase 4, paso 3 — sin verificar)
+
+- `Radial.Windows/Actions`: `IProcessLauncher` (destino, argumentos y directorio de trabajo **separados**), `ShellProcessLauncher` (`Process.Start` con `UseShellExecute`; **nunca** `cmd.exe`, PowerShell ni scripts) y los ejecutores `LaunchApplicationActionExecutor`, `OpenFileActionExecutor`, `OpenFolderActionExecutor`, `OpenUrlActionExecutor` sobre la base `ProcessActionExecutor<T>`. Orden fijo: tipo no admitido → cancelado → `GetProblems()` de Core → comprobaciones propias (existencia, esquema) → lanzamiento. No hay expansión de variables de entorno ni resolución de rutas relativas.
+- Códigos de error: `UnsupportedAction`, `InvalidAction`, `TargetNotFound`, `LaunchFailed`, `UrlNotAllowed`. Los mensajes no incluyen rutas ni direcciones.
+- **`OpenUrlAction` solo admite `http` y `https`**, con una única definición en Core (`OpenUrlAction.AllowedSchemes`); `mailto:` y el resto se rechazan al validar. El ejecutor de Windows reutiliza esa lista en su comprobación defensiva independiente justo antes de lanzar. No ampliarla sin decisión expresa.
+- Las pruebas de estos ejecutores usan un lanzador falso y no inician ningún proceso; `ShellProcessLauncher` se prueba con un arranque inyectado. El lanzador real solo está sin probar de extremo a extremo.
+
 ## DPI y overlay
 
 - `PerMonitorV2` (ver `app.manifest`). No usar `GetDpiForMonitor`; usar `GetDpiForWindow`, `VisualTreeHelper.GetDpi` y gestionar `WM_DPICHANGED`.
@@ -109,6 +117,6 @@ Convenciones del núcleo:
 
 ## Estado
 
-Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. **Fase 4 en curso, NO aprobada: solo están hechos los pasos 1 y 2** (contratos de ejecución de acciones y reloj de producción en Core; parser de atajos en Windows con el vocabulario de teclas unificado en Core; sección 17 del documento técnico; 916 pruebas). Ver las secciones 10, 12, 14, 15, 16 y 17.
+Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. **Fase 4 en curso, NO aprobada.** Pasos 1 y 2 hechos y verificados (contratos de ejecución de acciones y reloj de producción en Core; parser de atajos en Windows con el vocabulario de teclas unificado en Core; 916 pruebas en verde al cerrar el paso 2). **Paso 3 (ejecutores de aplicación, archivo, carpeta y URL) escrito y compilado, pero SIN VERIFICAR y NO aprobado:** Smart App Control bloqueó las pruebas de Windows y las de Core con el código actual; la última ejecución de Core (571 en verde) es anterior al ajuste de URL; las de Windows nunca se han ejecutado (documento técnico, 17.8). Ver las secciones 10, 12, 14, 15, 16 y 17.
 
 Roadmap: fase 3 captura global · fase 4 overlay real (variante A) y acciones · fase 5 submenús y configuración (MVP) · fase 6 ajustes y editor visual · fase 7 apariencia y sistema · fase 8 importar/exportar y distribución.
