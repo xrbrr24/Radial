@@ -89,7 +89,8 @@ dotnet run --project src/Radial.App
 - `Model`: `MenuId`/`ItemId` tipados, `RadialConfiguration`, `RadialMenu`, `RadialItem`, `RadialAction` y sus derivadas (solo datos).
 - `Engine`: `RadialEngine` (`Start`, `UpdatePointer`, `Tick`, `Confirm`, `Cancel`), `RadialResult`. Nunca ejecuta acciones.
 - `Validation`: `ConfigurationValidator`, códigos estables en `ValidationCodes`. Las pruebas comprueban códigos, no mensajes.
-- `Timing`: `IClock` monotónico. Las pruebas usan `ManualClock`; nunca esperas reales.
+- `Timing`: `IClock` monotónico. Las pruebas usan `ManualClock`; nunca esperas reales. `MonotonicClock` es el reloj de producción (fase 4, paso 1).
+- `Execution` (fase 4, paso 1): `IActionExecutor` (`CanExecute` + `ExecuteAsync` con `CancellationToken`) y `ActionExecutionResult` (`Succeeded`/`Failed` con `Error` código+mensaje/`Cancelled`). Solo contratos: los ejecutores concretos viven en `Radial.Windows`. Un ejecutor devuelve los fallos previsibles y la cancelación como resultado, no lanza.
 
 Convenciones del núcleo:
 - Un tipo de acción nuevo = un `record` que hereda de `RadialAction` e implementa `GetProblems()`.
@@ -101,6 +102,6 @@ Convenciones del núcleo:
 
 ## Estado
 
-Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. La fase 4 no ha comenzado. Ver las secciones 10, 12, 14, 15 y 16.
+Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. **Fase 4 en curso, NO aprobada: solo está hecho el paso 1** (contratos de ejecución de acciones y reloj de producción en Core, sección 17 del documento técnico; 421 pruebas). Ver las secciones 10, 12, 14, 15, 16 y 17.
 
 Roadmap: fase 3 captura global · fase 4 overlay real (variante A) y acciones · fase 5 submenús y configuración (MVP) · fase 6 ajustes y editor visual · fase 7 apariencia y sistema · fase 8 importar/exportar y distribución.

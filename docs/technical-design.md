@@ -1,6 +1,6 @@
-# Radial — Documento técnico v0.8
+# Radial — Documento técnico v0.9
 
-Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). Lo implementado está en las secciones 14 (núcleo) y 16 (captura global); todo lo demás sigue siendo diseño.
+Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: solo se ha hecho su paso 1** (contratos de ejecución de acciones y reloj de producción, sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (paso 1 de la fase 4); todo lo demás sigue siendo diseño.
 
 Convención: **[Comprobado]** = verificado con documentación oficial o en este equipo. **[Por validar]** = propuesta que debe confirmarse con un prototipo o prueba.
 
@@ -9,7 +9,8 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 | Versión | Cambios |
 |---|---|
 | v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
-| **v0.8** | Fase 3 **aprobada**. Se registra el resultado de la validación manual con hardware y del paso 14 (cierre durante la autoprueba), realizados por el usuario (16.9 y 16.10), y lo que sigue sin validar (16.12). Solo documentación: sin cambios de código respecto a la v0.7. |
+| **v0.9** | Fase 4, **paso 1** (de varios): contratos de ejecución de acciones (`IActionExecutor`, `ActionExecutionResult`, `ActionErrorCodes`) y reloj de producción (`MonotonicClock`) en `Radial.Core`. Sin ejecutores concretos ni cambios en `Radial.Windows` ni `Radial.App`. La fase 4 no está aprobada. Nueva sección 17. |
+| v0.8 | Fase 3 **aprobada**. Se registra el resultado de la validación manual con hardware y del paso 14 (cierre durante la autoprueba), realizados por el usuario (16.9 y 16.10), y lo que sigue sin validar (16.12). Solo documentación: sin cambios de código respecto a la v0.7. |
 | v0.7 | Correcciones de la auditoría final de la fase 3 (D1, D2, D3): la autoprueba comprueba cursor, ventana bajo el cursor y ventana en primer plano antes de **cada** inyección, marca sus eventos (`dwExtraInfo`, 32 bits) y solo acepta los propios; un segundo servicio ya no deja el estado en `Starting`; cerrar la ventana durante la autoprueba la cancela y libera de forma síncrona lo que pulsó. Secciones 16.1, 16.2, 16.4, 16.6, 16.7, 16.9 y 16.11. |
 | v0.6 | Fase 3 implementada: captura global (`GlobalInputService`, hooks de bajo nivel en un hilo dedicado, `ChordTracker`, watchdog, sonda de salud, diagnóstico) en `Radial.Windows`, y ventana de diagnóstico en `Radial.App`. **Cambio de diseño respecto a v0.5/3.3: el watchdog ya no comprueba el botón central con `GetAsyncKeyState`**, porque la autoprueba demostró que Windows no refleja un evento consumido por un hook (sección 16.6). Nueva sección 16. |
 | v0.5 | Fase 2 cerrada con cobertura parcial (un monitor al 125 %, una ejecución válida). Overlay de producción: **ventana layered de WPF (variante A)**, sin Acrylic, Mica ni técnicas DWM; el blur deja de ser requisito del MVP ([ADR-001](adr/ADR-001-overlay-rendering.md)). Nueva sección 10 con resultados y anomalías sin explicar, y sección 15 sobre Smart App Control. Fases 4 y 7 y el criterio 9 del MVP actualizados. |
@@ -758,3 +759,46 @@ Lo siguiente **no se ha comprobado** y no debe darse por probado:
 - Aplicaciones elevadas (UIPI), pantallas seguras, juegos en pantalla completa exclusiva.
 - Comportamiento bajo carga prolongada; eliminación del hook de teclado por Windows (sin detección).
 - Smart App Control: no hubo bloqueos en la fase 3, pero no demuestra que no ocurran en otro equipo o compilación (15.3).
+
+## 17. Fase 4, paso 1: contratos de ejecución de acciones y reloj de producción
+
+**Estado: solo el paso 1 de la fase 4 está implementado. La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Este paso no es visible para el usuario: define contratos y un reloj, sin ejecutar nada.
+
+### 17.1 Qué contiene
+
+Todo en `Radial.Core` (sin dependencias nuevas, sin APIs de Windows):
+
+| Tipo | Espacio de nombres | Función |
+|---|---|---|
+| `IActionExecutor` | `Execution` | Contrato: `CanExecute(RadialAction)` y `ExecuteAsync(RadialAction, CancellationToken)`. |
+| `ActionExecutionResult`, `ActionExecutionStatus`, `ActionExecutionError` | `Execution` | Resultado: `Succeeded`, `Failed` (con `Error`: código y mensaje) o `Cancelled`. |
+| `ActionErrorCodes` | `Execution` | Códigos estables del propio contrato: `UnsupportedAction`, `InvalidAction`. |
+| `MonotonicClock` | `Timing` | `IClock` de producción sobre `Stopwatch`. |
+
+**Contrato de `ExecuteAsync`** (documentado en el código): un fallo previsible no lanza, devuelve `Failure(código, mensaje)`; una cancelación devuelve `Cancelled` en lugar de lanzar `OperationCanceledException`; una acción que `CanExecute` rechaza da `UnsupportedAction`; una acción con problemas según `GetProblems()` da `InvalidAction` y no se ejecuta nada; no requiere el hilo de interfaz.
+
+### 17.2 Decisiones de diseño de este paso
+
+| Decisión | Motivo |
+|---|---|
+| Una sola interfaz no genérica con `CanExecute` | Coincide con la sección 8 (un ejecutor por tipo, resueltos en un registro) sin reflexión ni genéricos: el consumidor inyecta una única `IActionExecutor` y cada ejecutor decide qué tipos acepta. Añadir un ejecutor no toca el modelo, el motor ni el validador. |
+| Tres estados, no dos: `Cancelled` separado de `Failed` | Cancelar (otro gesto, cierre de la aplicación) no es un error y no debe notificarse como tal. |
+| Error = `Code` (inglés, estable) + `Message` (español) | Misma convención que `ValidationIssue`: las pruebas comprueban códigos, no mensajes, y no depende de ninguna interfaz. |
+| El resultado solo se crea con `Success`, `Failure` o `Cancelled` | Garantiza que `Error` existe si y solo si el estado es `Failed`. |
+| `ActionErrorCodes` solo contiene los códigos del propio contrato | Cada ejecutor añadirá los suyos (p. ej. el vencimiento de un atajo) cuando exista, en lugar de definirlos por adelantado. |
+| `MonotonicClock` en `Radial.Core`, no en `Radial.Windows` | Solo usa la biblioteca base (`Stopwatch`), no depende de ninguna plataforma, y así lo cubren las pruebas de Core. Reemplaza lo que decía 14.7 ("no hay reloj de producción en Core todavía"). |
+| `Now` es el tiempo desde que se crea el reloj | `IClock` solo garantiza diferencias fiables. Medir contra un origen evita convertir el contador absoluto a ticks, que desbordaría con tiempos de actividad largos. |
+
+### 17.3 Qué NO hay todavía
+
+Ejecutores concretos (aplicación, archivo, carpeta, URL, atajo), `IProcessLauncher`, conversión de atajos a teclas, espera de modificadores, coordinador, canal de eventos para varios lectores, overlay, `RadialView`, DPI y monitores, configuración provisional, notificaciones y cambios de ciclo de vida. Son pasos posteriores de la fase 4. **Nada de la fase 3 se ha modificado** (hooks, `ChordTracker`, servicio de entrada, autoprueba).
+
+### 17.4 Verificación de este paso
+
+**Automática (421 pruebas en verde: 272 Core + 149 Windows; 20 nuevas, las 401 anteriores sin modificar; build sin advertencias):**
+- `ActionExecutionResultTests`: éxito, fallo con código y mensaje, cancelación sin error, rechazo de código o mensaje vacíos, los tres resultados distinguibles, igualdad por valor, códigos estables.
+- `ExecutionContractIndependenceTests`: Core no referencia ensamblados de procesos, red, Win32 ni WPF; la API pública de `Execution` solo expone tipos de Core o de la biblioteca base; la firma se integra con `RadialAction` y `CancellationToken`. Se comprobó que fallan si se introduce un `System.Diagnostics.Process` en la API (mutación hecha a mano y revertida).
+- `MonotonicClockTests`: es un `IClock`, no retrocede (100 000 lecturas), avanza sin que nadie lo avance, mide el tiempo real en las unidades correctas (cota inferior estricta de 20 ms, superior muy holgada) y el motor funciona con él. Son las únicas pruebas de Core con tiempo real, y solo ~20 ms.
+- **No hay prueba de `IActionExecutor` en sí**: es una interfaz sin implementación. Se probará con cada ejecutor concreto.
+
+**Manual:** ninguna; este paso no cambia el comportamiento de la aplicación.
