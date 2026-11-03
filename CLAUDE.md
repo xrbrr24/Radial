@@ -61,6 +61,13 @@ Radial.Core.Tests ──▶ Core        Radial.Windows.Tests ──▶ Windows, 
 - Un segundo `GlobalInputService` en el proceso no instala hooks: `Start` devuelve `Success = false` y el estado queda `Faulted` (nunca `Starting`).
 - Reanudar o desbloquear solo deja un aviso: no se reinstalan los hooks.
 
+## Atajos de teclado (fase 4, paso 2 y su corrección)
+
+- **El vocabulario de teclas tiene UNA fuente de verdad: `Radial.Core.Model.KeyVocabulary`.** Es una regla del dominio. `SendKeysAction.GetProblems()` valida la tecla con ella; Windows no tiene lista propia de nombres. Lo que valida una acción es siempre ejecutable.
+- **Vocabulario cerrado de 66 teclas, sin alias:** `A`–`Z`, `0`–`9` (fila superior), `F1`–`F24`, `Enter`, `Tab`, `ArrowLeft`/`ArrowUp`/`ArrowRight`/`ArrowDown`. Sin distinguir mayúsculas, solo ASCII, sin recortar espacios, sin depender de la cultura. Fuera: Ñ, símbolos, teclas OEM, teclado numérico, Escape, Space, Backspace, Delete. **No ampliarlo sin decisión expresa**: exige tocar la lista de Core y la tabla de códigos de Windows (si se olvida la segunda, `ShortcutParser` falla al inicializarse) y actualizar 17.5 y 17.6.
+- `Radial.Windows/Shortcuts/ShortcutParser` solo asigna a cada nombre de `KeyVocabulary.Names` su código VK y su indicador `Extended` (solo las cuatro flechas lo son). Los códigos de Windows **no** viven en Core. Es solo traducción: no envía teclas ni usa P/Invoke.
+- Los modificadores (`KeyModifiers`) pasan sin tocar; validarlos es de `SendKeysAction.GetProblems()`. Una configuración con una tecla fuera del vocabulario se rechaza al validar; el editor (fases 5 y 6) debe ofrecer solo `KeyVocabulary.Names`.
+
 ## DPI y overlay
 
 - `PerMonitorV2` (ver `app.manifest`). No usar `GetDpiForMonitor`; usar `GetDpiForWindow`, `VisualTreeHelper.GetDpi` y gestionar `WM_DPICHANGED`.
@@ -102,6 +109,6 @@ Convenciones del núcleo:
 
 ## Estado
 
-Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. **Fase 4 en curso, NO aprobada: solo está hecho el paso 1** (contratos de ejecución de acciones y reloj de producción en Core, sección 17 del documento técnico; 421 pruebas). Ver las secciones 10, 12, 14, 15, 16 y 17.
+Fases 0 y 1 completadas. Fase 2 cerrada con cobertura parcial y decisión aceptada (ADR-001). **Fase 3 aprobada** (401 pruebas automáticas en verde: 252 Core + 149 Windows; autoprueba sintética; validación manual con hardware y cierre durante la autoprueba realizados por el usuario; auditoría D1–D3 corregida). Sin validar al cierre: bloqueo/suspensión reales, otros DPI, varios monitores, Windows 11 25H2, Ctrl atascado (hipótesis); ver 16.12 del documento técnico. **Fase 4 en curso, NO aprobada: solo están hechos los pasos 1 y 2** (contratos de ejecución de acciones y reloj de producción en Core; parser de atajos en Windows con el vocabulario de teclas unificado en Core; sección 17 del documento técnico; 916 pruebas). Ver las secciones 10, 12, 14, 15, 16 y 17.
 
 Roadmap: fase 3 captura global · fase 4 overlay real (variante A) y acciones · fase 5 submenús y configuración (MVP) · fase 6 ajustes y editor visual · fase 7 apariencia y sistema · fase 8 importar/exportar y distribución.

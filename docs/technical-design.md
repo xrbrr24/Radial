@@ -1,6 +1,6 @@
-# Radial — Documento técnico v0.9
+# Radial — Documento técnico v0.11
 
-Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: solo se ha hecho su paso 1** (contratos de ejecución de acciones y reloj de producción, sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (paso 1 de la fase 4); todo lo demás sigue siendo diseño.
+Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: solo se han hecho sus pasos 1 y 2** (contratos de ejecución de acciones y reloj de producción; parser de atajos; sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (pasos 1 y 2 de la fase 4); todo lo demás sigue siendo diseño.
 
 Convención: **[Comprobado]** = verificado con documentación oficial o en este equipo. **[Por validar]** = propuesta que debe confirmarse con un prototipo o prueba.
 
@@ -9,7 +9,9 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 | Versión | Cambios |
 |---|---|
 | v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
-| **v0.9** | Fase 4, **paso 1** (de varios): contratos de ejecución de acciones (`IActionExecutor`, `ActionExecutionResult`, `ActionErrorCodes`) y reloj de producción (`MonotonicClock`) en `Radial.Core`. Sin ejecutores concretos ni cambios en `Radial.Windows` ni `Radial.App`. La fase 4 no está aprobada. Nueva sección 17. |
+| **v0.11** | Corrección del paso 2: el vocabulario de teclas de un atajo (66 nombres) tiene **una única fuente de verdad en `Radial.Core`** (`KeyVocabulary`). `SendKeysAction` lo usa para validar y `ShortcutParser` (Windows) solo asigna códigos VK y `Extended`; se acabó la incoherencia entre validar y poder ejecutar (17.6). Se eliminó `SendKeysAction.MaxKeyLength`. La fase 4 no está aprobada. |
+| v0.10 | Fase 4, **paso 2** (de varios): parser de atajos (`ShortcutParser`) en `Radial.Windows`, con vocabulario cerrado de 66 teclas (17.5). Solo traducción a códigos de tecla virtual: sin envío de teclas, sin P/Invoke, sin cambios en `Radial.Core` ni en la captura global. La fase 4 no está aprobada. |
+| v0.9 | Fase 4, **paso 1** (de varios): contratos de ejecución de acciones (`IActionExecutor`, `ActionExecutionResult`, `ActionErrorCodes`) y reloj de producción (`MonotonicClock`) en `Radial.Core`. Sin ejecutores concretos ni cambios en `Radial.Windows` ni `Radial.App`. La fase 4 no está aprobada. Nueva sección 17. |
 | v0.8 | Fase 3 **aprobada**. Se registra el resultado de la validación manual con hardware y del paso 14 (cierre durante la autoprueba), realizados por el usuario (16.9 y 16.10), y lo que sigue sin validar (16.12). Solo documentación: sin cambios de código respecto a la v0.7. |
 | v0.7 | Correcciones de la auditoría final de la fase 3 (D1, D2, D3): la autoprueba comprueba cursor, ventana bajo el cursor y ventana en primer plano antes de **cada** inyección, marca sus eventos (`dwExtraInfo`, 32 bits) y solo acepta los propios; un segundo servicio ya no deja el estado en `Starting`; cerrar la ventana durante la autoprueba la cancela y libera de forma síncrona lo que pulsó. Secciones 16.1, 16.2, 16.4, 16.6, 16.7, 16.9 y 16.11. |
 | v0.6 | Fase 3 implementada: captura global (`GlobalInputService`, hooks de bajo nivel en un hilo dedicado, `ChordTracker`, watchdog, sonda de salud, diagnóstico) en `Radial.Windows`, y ventana de diagnóstico en `Radial.App`. **Cambio de diseño respecto a v0.5/3.3: el watchdog ya no comprueba el botón central con `GetAsyncKeyState`**, porque la autoprueba demostró que Windows no refleja un evento consumido por un hook (sección 16.6). Nueva sección 16. |
@@ -760,9 +762,11 @@ Lo siguiente **no se ha comprobado** y no debe darse por probado:
 - Comportamiento bajo carga prolongada; eliminación del hook de teclado por Windows (sin detección).
 - Smart App Control: no hubo bloqueos en la fase 3, pero no demuestra que no ocurran en otro equipo o compilación (15.3).
 
-## 17. Fase 4, paso 1: contratos de ejecución de acciones y reloj de producción
+## 17. Fase 4 (en curso): pasos 1 y 2
 
-**Estado: solo el paso 1 de la fase 4 está implementado. La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Este paso no es visible para el usuario: define contratos y un reloj, sin ejecutar nada.
+**Estado: solo los pasos 1 y 2 de la fase 4 están implementados. La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Ninguno de los dos pasos es visible para el usuario: el primero define contratos y un reloj, el segundo una traducción de teclas; no se ejecuta ni se envía nada. Los apartados 17.1 a 17.4 son el paso 1 y el 17.5 es el paso 2.
+
+### Paso 1: contratos de ejecución de acciones y reloj de producción
 
 ### 17.1 Qué contiene
 
@@ -791,7 +795,7 @@ Todo en `Radial.Core` (sin dependencias nuevas, sin APIs de Windows):
 
 ### 17.3 Qué NO hay todavía
 
-Ejecutores concretos (aplicación, archivo, carpeta, URL, atajo), `IProcessLauncher`, conversión de atajos a teclas, espera de modificadores, coordinador, canal de eventos para varios lectores, overlay, `RadialView`, DPI y monitores, configuración provisional, notificaciones y cambios de ciclo de vida. Son pasos posteriores de la fase 4. **Nada de la fase 3 se ha modificado** (hooks, `ChordTracker`, servicio de entrada, autoprueba).
+Ejecutores concretos (aplicación, archivo, carpeta, URL, atajo), `IProcessLauncher`, envío de teclas, espera de modificadores, coordinador, canal de eventos para varios lectores, overlay, `RadialView`, DPI y monitores, configuración provisional, notificaciones y cambios de ciclo de vida. Son pasos posteriores de la fase 4. **Nada de la fase 3 se ha modificado** (hooks, `ChordTracker`, servicio de entrada, autoprueba).
 
 ### 17.4 Verificación de este paso
 
@@ -802,3 +806,69 @@ Ejecutores concretos (aplicación, archivo, carpeta, URL, atajo), `IProcessLaunc
 - **No hay prueba de `IActionExecutor` en sí**: es una interfaz sin implementación. Se probará con cada ejecutor concreto.
 
 **Manual:** ninguna; este paso no cambia el comportamiento de la aplicación.
+
+### 17.5 Paso 2: parser de atajos
+
+**Estado: implementado y probado automáticamente. Es solo traducción: no envía ninguna tecla, no usa P/Invoke ni `SendInput`, no lee el teclado.** El envío de teclas, la espera de modificadores y el ejecutor del atajo son pasos posteriores. *(Tras la revisión del paso 2, la lista de nombres de tecla pasó a `Radial.Core` como única fuente de verdad y el parser solo asigna códigos; ver 17.6. Lo que sigue describe el parser y la tabla de códigos, que no cambiaron.)*
+
+Código en `Radial.Windows/Shortcuts` (tipos internos; las pruebas acceden por `InternalsVisibleTo`):
+
+| Tipo | Función |
+|---|---|
+| `ShortcutParser` | `TryParse(KeyChord?, out ParsedShortcut)` y `TryParseKey(string?, out VirtualKey)`. Devuelven falso, sin lanzar, ante una entrada nula, vacía o fuera del vocabulario. `SupportedKeys` lista el vocabulario. |
+| `VirtualKey(Name, Code, Extended)` | Nombre canónico, código `VK_*` e indicador de tecla extendida. |
+| `ParsedShortcut(Modifiers, Key)` | El `KeyModifiers` **del modelo, sin tocar**, y la tecla traducida. |
+
+**Vocabulario cerrado (66 teclas), definido en `Radial.Core` (17.6).** Sin alias, traducciones ni nombres alternativos. No se distingue entre mayúsculas y minúsculas, pero el nombre canónico es estable (letras en mayúscula; el resto, tal como aparece abajo). No se recortan espacios. Solo se admite ASCII.
+
+| Teclas | Nombre canónico | Código VK | `Extended` |
+|---|---|---|---|
+| Letras | `A` … `Z` | `0x41` … `0x5A` | no |
+| Dígitos (fila superior) | `0` … `9` | `0x30` … `0x39` | no |
+| Función | `F1` … `F24` | `0x70` … `0x87` | no |
+| Enter | `Enter` | `0x0D` (`VK_RETURN`) | no |
+| Tab | `Tab` | `0x09` | no |
+| Flecha izquierda | `ArrowLeft` | `0x25` | **sí** |
+| Flecha arriba | `ArrowUp` | `0x26` | **sí** |
+| Flecha derecha | `ArrowRight` | `0x27` | **sí** |
+| Flecha abajo | `ArrowDown` | `0x28` | **sí** |
+
+**Fuera del vocabulario** (se rechazan): Ñ y letras no ASCII, símbolos y puntuación y cualquier tecla OEM que dependa de la distribución, el teclado numérico y su Enter, Escape, Space, Backspace, Delete y toda tecla no enumerada. Ampliar el vocabulario es una decisión de diseño que exige revisar esta tabla.
+
+Decisiones y observaciones:
+- **Independiente de la distribución.** La tabla es fija: no se usa `VkKeyScan` ni nada que dependa del teclado, del idioma o de la cultura (hay una prueba con la cultura turca). Por eso Ñ y los símbolos quedan fuera: su tecla depende de la distribución.
+- **Los modificadores no se parsean ni se validan aquí.** `KeyChord.Modifiers` es un `KeyModifiers` ya estructurado y pasa tal cual (incluidos bits desconocidos). Comprobar que los bits son válidos es de `SendKeysAction.GetProblems()`, que el ejecutor debe consultar antes de ejecutar (contrato del paso 1).
+- **`Extended` solo en las flechas.** Sin ese indicador, `SendInput` con `VK_LEFT`… puede interpretarse como las flechas del teclado numérico.
+- **Incoherencia detectada en la revisión y corregida (17.6).** Tal como se entregó este paso, `SendKeysAction.GetProblems()` aceptaba cualquier nombre de hasta 32 caracteres sin espacios y el parser solo las 66 teclas, así que `Delete` o `Space` validaban pero no se podían ejecutar.
+- **Filtro ASCII** (ahora en `KeyVocabulary`, 17.6). Medido en .NET 10: sin él, `OrdinalIgnoreCase` ya rechaza el signo Kelvin, la «s» larga, la «i» sin punto y los caracteres de ancho completo. Se mantiene para que «solo ASCII» sea una garantía por construcción y no depender de las tablas del runtime; las pruebas fijan esos casos.
+
+**Verificación del parser (automática; 191 pruebas nuevas, 612 en total tras este paso: 272 Core + 340 Windows; build sin advertencias; sin cambios tras la corrección 17.6, que las mantiene y añade más):** las 26 letras y los 10 dígitos con su código, F1–F24 (cada una, más valores conocidos y el rechazo de F0, F25, F01, F100…), Enter y Tab sin `Extended`, las cuatro flechas con `Extended`, que solo las flechas son extendidas, mayúsculas y minúsculas mezcladas con nombre canónico, la cultura turca, que el vocabulario es exactamente el aprobado (66 nombres, sin dos nombres para la misma tecla), el rechazo de Ñ, acentos, letras de ancho completo, Kelvin, símbolos, nombres fuera del vocabulario, cadenas vacías o con espacios, nulos y atajos nulos, y que las 16 combinaciones de modificadores se conservan intactas. Los códigos esperados de las pruebas están escritos a mano, no calculados con la misma fórmula. Se comprobó que fallan si se desplaza F1, si `ArrowUp` pierde `Extended` o si se añade `Space` (mutaciones hechas a mano y revertidas).
+
+**No hay verificación manual ni envío real:** este paso no puede fallar en la práctica hasta que algo envíe las teclas.
+
+### 17.6 Corrección del paso 2: una única fuente de verdad del vocabulario
+
+**Problema (detectado al revisar el paso 2).** Había dos definiciones de qué teclas son válidas: `SendKeysAction.GetProblems()` en Core (cualquier nombre de ≤ 32 caracteres sin espacios) y `ShortcutParser` en Windows (las 66 aprobadas). Una acción con `Delete`, `Space` o `Ñ` pasaba la validación de la configuración y no se podía ejecutar.
+
+**Decisión.** El vocabulario permitido es una regla del dominio y vive **solo en `Radial.Core`**; Windows únicamente convierte esos nombres a códigos de tecla virtual:
+
+| Pieza | Proyecto | Responsabilidad |
+|---|---|---|
+| `KeyVocabulary` (`Radial.Core.Model`, junto a `KeyChord`) | Core | **Única lista** de los 66 nombres (`Names`) y la regla de comparación (`TryGetCanonicalName`: sin distinguir mayúsculas, solo ASCII, sin recortar espacios, sin depender de la cultura). `Description` es un resumen para mensajes, construido con la misma definición. Sin códigos de Windows. |
+| `SendKeysAction.GetProblems()` | Core | Valida la tecla con `KeyVocabulary`: vacía o fuera del vocabulario es un problema (`action.invalid`). El mensaje lista las teclas admitidas y no repite el texto recibido, que puede ser enorme. Los modificadores se validan exactamente como antes. |
+| `ShortcutParser` | Windows | Recorre `KeyVocabulary.Names` y asigna a cada nombre su código VK y su indicador `Extended`. **No tiene una segunda lista de nombres**: lo que Core no admite no es alcanzable, y un nombre que Core añadiera sin código VK haría fallar la inicialización en lugar de aceptarse a medias. |
+
+**Consecuencias.**
+- Lo que valida una acción es siempre ejecutable (y al revés), para cualquier entrada; una prueba lo comprueba sobre más de 500 candidatos.
+- Ampliar el vocabulario exige tocar dos cosas, a propósito: la lista de Core y la tabla de códigos de Windows. Si se olvida la segunda, el fallo es inmediato y explícito.
+- Se eliminó `SendKeysAction.MaxKeyLength` (32): el vocabulario cerrado hace redundante el chequeo de longitud y espacios (el nombre más largo mide 10). Nadie más la usaba.
+- `KeyChord` y `KeyModifiers` no cambian. Una configuración con una tecla fuera del vocabulario ahora **se rechaza al validar**, no al ejecutar; el editor de las fases 5 y 6 deberá ofrecer solo `KeyVocabulary.Names`.
+
+**Pruebas modificadas por ser incorrectas con el nuevo comportamiento (2, cambio mínimo):** `RadialModelTests.EveryActionKind_CanBeRepresented` exigía que `Delete` no tuviera problemas (ahora usa `ArrowLeft`), y `ConfigurationValidatorTests.InvalidActions` usaba la constante eliminada (ahora el valor literal anterior, 33 caracteres, que sigue siendo inválido). No se eliminó ninguna prueba.
+
+**Verificación (automática; 304 pruebas nuevas, 916 en total: 568 Core + 348 Windows; build sin advertencias):**
+- Core, `KeyVocabularyTests`: los nombres son exactamente los 66 aprobados (lista escrita a mano), solo lectura, aceptados en cualquier grafía con su nombre canónico, rechazo de Ñ, Space, Delete, Escape, símbolos, numpad, alias, nombres desconocidos, vacíos, con espacios y nulos, cultura turca.
+- Core, `SendKeysActionValidationTests`: cada una de las 66 teclas supera `GetProblems()` y el validador de la configuración en cualquier grafía; cada nombre rechazado produce un único problema y `action.invalid`; las 16 combinaciones de modificadores válidas se aceptan, los bits desconocidos se siguen rechazando y una tecla inválida con modificadores inválidos da dos problemas; una tecla de 100 000 caracteres no se repite en el mensaje.
+- Windows, `KeyVocabularyConsistencyTests`: el parser admite exactamente los nombres de Core; cada nombre de Core se traduce en cualquier grafía; el parser y Core coinciden en cada candidato (los nombres en tres grafías, con espacios, todos los caracteres sueltos hasta U+017F, Space, Delete, Ñ, nulo…); una acción valida si y solo si se traduce.
+- Las 191 pruebas del parser (códigos VK y `Extended`) siguen pasando **sin modificarlas**.
+- Mutaciones hechas a mano y revertidas: añadir `Space` solo en Core (fallan Core y Windows), volver a la validación antigua (fallan 68 en Core y 5 en Windows), quitar la tabla de `ArrowUp` en Windows (fallan 106 en Windows).

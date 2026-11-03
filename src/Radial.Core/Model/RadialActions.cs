@@ -43,8 +43,6 @@ public sealed record OpenUrlAction(string Url) : RadialAction
 
 public sealed record SendKeysAction(KeyChord Chord) : RadialAction
 {
-    public const int MaxKeyLength = 32;
-
     public override IEnumerable<string> GetProblems()
     {
         if (Chord is null)
@@ -57,9 +55,10 @@ public sealed record SendKeysAction(KeyChord Chord) : RadialAction
         {
             problems.Add("La tecla de la combinación es obligatoria.");
         }
-        else if (Chord.Key.Length > MaxKeyLength || Chord.Key.Any(char.IsWhiteSpace))
+        else if (!KeyVocabulary.TryGetCanonicalName(Chord.Key, out _))
         {
-            problems.Add($"La tecla debe tener como máximo {MaxKeyLength} caracteres y no contener espacios.");
+            // No se repite el texto recibido: puede ser larguísimo y la ruta del problema ya localiza el elemento.
+            problems.Add($"La tecla de la combinación no está admitida. Teclas admitidas: {KeyVocabulary.Description}.");
         }
 
         const KeyModifiers all = KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt | KeyModifiers.Windows;

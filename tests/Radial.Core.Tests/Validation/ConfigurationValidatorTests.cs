@@ -230,7 +230,7 @@ public class ConfigurationValidatorTests
         new SendKeysAction(null!),
         new SendKeysAction(new KeyChord(KeyModifiers.Control, "")),
         new SendKeysAction(new KeyChord(KeyModifiers.Control, "Ctrl C")),
-        new SendKeysAction(new KeyChord(KeyModifiers.Control, new string('k', SendKeysAction.MaxKeyLength + 1))),
+        new SendKeysAction(new KeyChord(KeyModifiers.Control, new string('k', 33))),
         new SendKeysAction(new KeyChord((KeyModifiers)64, "C")),
         new OpenMenuAction(new MenuId("")),
     };

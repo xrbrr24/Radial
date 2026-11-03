@@ -54,7 +54,7 @@ public class RadialModelTests
             new OpenFileAction(@"C:\a.txt"),
             new OpenFolderAction(@"C:\"),
             new OpenUrlAction("https://example.com"),
-            new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, "Delete")),
+            new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, "ArrowLeft")),
             new OpenMenuAction(TestConfigs.Work),
         ];
 
