@@ -43,6 +43,8 @@ public sealed class GlobalInputService : IDisposable
 
     private CaptureState _state = CaptureState.Stopped;
     private bool _disposed;
+    private bool _hooksMayBeInstalled; // con _lifecycle: verdadero desde que se pide instalar hasta que el host confirma que paró
+    private string? _failureReason; // con _lifecycle: motivo de Fail, o null si no hay un fallo registrado
     private HookInstallStatus _keyboardStatus;
     private HookInstallStatus _mouseStatus;
 
@@ -154,6 +156,7 @@ public sealed class GlobalInputService : IDisposable
             }
 
             _state = CaptureState.Starting;
+            _failureReason = null; // una captura nueva empieza sin el fallo de la anterior
             try
             {
                 lock (_gate)
@@ -165,6 +168,7 @@ public sealed class GlobalInputService : IDisposable
                     _mouseActivity = MouseActivity.NotMonitored;
                 }
 
+                _hooksMayBeInstalled = true;
                 var result = _host.Start(OnInput);
                 _keyboardStatus = result.Keyboard;
                 _mouseStatus = result.Mouse;
@@ -205,32 +209,74 @@ public sealed class GlobalInputService : IDisposable
                 return;
             }
 
-            _state = CaptureState.Stopping;
-            _systemEvents.Detach();
-            _health.Stop();
+            ReleaseCapture();
+        }
+    }
 
-            var stopped = true;
+    /// <summary>
+    /// Fallo de quien consume <see cref="Events"/> (el lector terminó sin que se pidiera): quita los hooks, cancela el gesto activo
+    /// y deja el estado en <see cref="CaptureState.Faulted"/> con <paramref name="reason"/> en los errores del diagnóstico, para que
+    /// no se siga consumiendo entrada que nadie procesa. Es seguro llamarlo varias veces (solo la primera hace algo), con la captura
+    /// ya detenida y tras <see cref="Dispose"/> (entonces no hace nada). Una <see cref="Stop"/> posterior no borra el fallo; el
+    /// fallo se olvida en el siguiente <see cref="Start"/>. El servicio no sabe si el lector sigue vivo: volver a iniciar la
+    /// captura con el lector muerto es responsabilidad de quien lo supervisa.
+    /// </summary>
+    public void Fail(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        lock (_lifecycle)
+        {
+            if (_disposed || _failureReason is not null)
+            {
+                return;
+            }
+
+            _failureReason = reason;
+            AddMessage(_errors, "La captura se detuvo por un fallo interno: " + reason);
+
+            if (_state is CaptureState.Stopped)
+            {
+                _state = CaptureState.Faulted; // los hooks ya estaban quitados
+                return;
+            }
+
+            ReleaseCapture();
+        }
+    }
+
+    /// <summary>Quita los hooks (si puede quedar alguno), cancela el gesto y fija el estado final. Con <c>_lifecycle</c> tomado.</summary>
+    private void ReleaseCapture()
+    {
+        _state = CaptureState.Stopping;
+        _systemEvents.Detach();
+        _health.Stop();
+
+        var stopped = true;
+        if (_hooksMayBeInstalled)
+        {
             try
             {
                 _host.Stop();
+                _hooksMayBeInstalled = false;
             }
             catch (Exception exception)
             {
                 stopped = false;
                 AddMessage(_errors, "Error al detener los hooks: " + exception.Message);
             }
-
-            lock (_gate)
-            {
-                Publish(_tracker.Cancel(CancelCause.ServiceStopped), Stopwatch.GetTimestamp());
-                _tracker.Reset();
-                _active = false;
-                SyncWatchdog();
-                _mouseActivity = MouseActivity.NotMonitored;
-            }
-
-            _state = stopped ? CaptureState.Stopped : CaptureState.Faulted;
         }
+
+        lock (_gate)
+        {
+            Publish(_tracker.Cancel(CancelCause.ServiceStopped), Stopwatch.GetTimestamp());
+            _tracker.Reset();
+            _active = false;
+            SyncWatchdog();
+            _mouseActivity = MouseActivity.NotMonitored;
+        }
+
+        _state = stopped && _failureReason is null ? CaptureState.Stopped : CaptureState.Faulted;
     }
 
     /// <summary>Cancela el gesto activo (prueba manual, bloqueo de sesión...). Devuelve si había uno.</summary>
@@ -520,6 +566,7 @@ public sealed class GlobalInputService : IDisposable
         try
         {
             _host.Stop();
+            _hooksMayBeInstalled = false;
         }
         catch (Exception exception)
         {

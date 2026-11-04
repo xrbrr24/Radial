@@ -34,7 +34,8 @@ public partial class MainWindow : Window
     private bool _selfTestRunning;
     private bool _closeRequestedDuringSelfTest;
     private Task? _readerTask;
-    private GestureReaderEnd? _readerEnd;
+    private readonly GestureReaderSupervisor _supervisor;
+    private GestureReaderEnd? _readerEnd => _supervisor.End;
     private string? _readerLastFailure;
 
     /// <param name="selfTestOutput">Si se indica, al cargar la ventana se ejecuta la autoprueba, se escribe el resultado en ese archivo y se cierra.</param>
@@ -61,6 +62,11 @@ public partial class MainWindow : Window
         _coordinator.ActionFinished += OnActionFinished;
         _coordinator.SubscriberFailed += (eventName, exception) => AppendLine($"[radial] ERROR en un suscriptor de {eventName}: {exception.GetType().Name}: {exception.Message}");
         _reader = new GestureEventReader(_service.Events, ProcessGesture, OnReaderFailure);
+
+        // Si el lector termina sin que se haya pedido, la captura se detiene como fallo (hooks fuera, overlay oculto): los hooks no
+        // pueden seguir consumiendo entrada que nadie procesa.
+        _supervisor = new GestureReaderSupervisor(_reader, reason => _service.Fail(reason), _coordinator.Dismiss);
+        _supervisor.Failed += OnCaptureFailed;
         _overlayPoll.Tick += (_, _) => PollRadial();
         if (selfTestOutput is not null)
         {
@@ -216,7 +222,9 @@ public partial class MainWindow : Window
         IEnumerable<string> readerProblem = readerEnd is { Reason: not GestureReaderEndReason.Cancelled } ? ["ERROR  " + ReaderStoppedMessage(readerEnd)] : [];
         MessagesBox.Text = string.Join(Environment.NewLine, d.Errors.Select(e => "ERROR  " + e).Concat(readerProblem).Concat(d.Notices.Select(n => "AVISO  " + n)));
 
-        StartButton.IsEnabled = d.State is CaptureState.Stopped or CaptureState.Faulted && !_selfTestRunning;
+        // Con el lector muerto no se puede volver a iniciar la captura (nadie procesaría los eventos): hay que reabrir la aplicación.
+        var readerFailed = _supervisor.Failure is not null;
+        StartButton.IsEnabled = d.State is CaptureState.Stopped or CaptureState.Faulted && !_selfTestRunning && !readerFailed;
         StopButton.IsEnabled = d.State != CaptureState.Stopped && !_selfTestRunning;
         CancelButton.IsEnabled = running;
         SelfTestButton.IsEnabled = running && !_selfTestRunning;
@@ -239,27 +247,30 @@ public partial class MainWindow : Window
     {
         try
         {
-            GestureReaderEnd end;
-            try
-            {
-                end = await _reader.RunAsync(_closing.Token);
-            }
-            catch (Exception exception)
-            {
-                // RunAsync no debería lanzar (contrato); si lo hiciera, no se pierde.
-                end = new GestureReaderEnd(GestureReaderEndReason.ChannelFaulted, exception);
-            }
-
-            _readerEnd = end;
-            if (end.Reason != GestureReaderEndReason.Cancelled)
-            {
-                AppendLine("[lector] " + ReaderStoppedMessage(end));
-            }
+            // Un final inesperado lo gestiona y comunica el propio supervisor (OnCaptureFailed); el de cierre es el esperado.
+            await _supervisor.RunAsync(_closing.Token);
         }
         catch
         {
-            // El estado ya está guardado en _readerEnd y lo muestra el diagnóstico; esta tarea no puede fallar.
+            // El estado ya está guardado en el supervisor y lo muestra el diagnóstico; esta tarea no puede fallar.
         }
+    }
+
+    /// <summary>
+    /// El lector terminó sin que se pidiera y el supervisor ya detuvo la captura (hooks fuera, overlay oculto, estado «con
+    /// problemas»). La ventana sigue abierta, sin captura. No se reinicia nada solo.
+    /// </summary>
+    private void OnCaptureFailed(CaptureFailure failure)
+    {
+        _overlayPoll.Stop();
+        AppendLine("[captura] ERROR: " + failure.Reason);
+        foreach (var problem in failure.CleanupProblems)
+        {
+            AppendLine("[captura] ERROR en la limpieza: " + problem);
+        }
+
+        AppendLine("[captura] La captura está detenida y no se reinicia sola: cierra y vuelve a abrir Radial.");
+        RefreshState();
     }
 
     /// <summary>Procesa un evento del canal. El radial lo recibe aunque el registro falle: perder un «confirmado» dejaría el overlay visible.</summary>
@@ -300,13 +311,7 @@ public partial class MainWindow : Window
             : $"en marcha; {_reader.TotalFailures} fallo(s) recuperado(s), último: {_readerLastFailure}";
     }
 
-    private static string ReaderStoppedMessage(GestureReaderEnd end) => end.Reason switch
-    {
-        GestureReaderEndReason.ChannelCompleted => "el canal de eventos se cerró; los gestos ya no se procesan.",
-        GestureReaderEndReason.ChannelFaulted => $"el canal de eventos terminó con un error ({end.Exception?.GetType().Name}); los gestos ya no se procesan.",
-        GestureReaderEndReason.TooManyFailures => $"{end.ConsecutiveFailures} eventos seguidos fallaron ({end.Exception?.GetType().Name}); el lector se detuvo y los gestos ya no se procesan.",
-        _ => "detenido.",
-    };
+    private static string ReaderStoppedMessage(GestureReaderEnd end) => GestureReaderSupervisor.Describe(end);
 
     /// <summary>
     /// Reenvía el gesto al coordinador del radial. Un fallo del overlay se registra y se contiene: este bucle es el único lector
@@ -379,6 +384,12 @@ public partial class MainWindow : Window
 
     private void OnStart(object sender, RoutedEventArgs e)
     {
+        if (_supervisor.Failure is not null)
+        {
+            AppendLine("NO se inicia la captura: el lector de eventos terminó con un fallo y no hay quien procese los gestos. Cierra y vuelve a abrir Radial.");
+            return;
+        }
+
         var result = _service.Start();
         AppendLine(result.Success ? "Captura iniciada." : "NO se pudo iniciar: " + result.Message);
         RefreshState();
