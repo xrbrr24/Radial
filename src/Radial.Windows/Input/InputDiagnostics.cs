@@ -34,8 +34,13 @@ public enum GestureEventKind
 /// Evento crítico del gesto. Nunca se descarta ni se reordena. <see cref="Sequence"/> es creciente;
 /// <see cref="Timestamp"/> es el <c>Stopwatch</c> del evento de entrada que lo originó. Los movimientos NO viajan aquí:
 /// se leen con <see cref="GlobalInputService.LatestPointer"/>.
+/// <see cref="SyntheticWindow"/>: el servicio publicó el evento mientras aceptaba la entrada sintética propia
+/// (<see cref="GlobalInputService.AcceptOwnSyntheticInput"/>, es decir, durante la autoprueba). Se decide al publicar, dentro del
+/// mismo cerrojo que el estado del gesto, y viaja con el evento: aunque se lea mucho después, cuando la autoprueba ya terminó,
+/// quien lo consuma sigue sabiendo que no puede actuar sobre él. Los eventos que el servicio publica con la aceptación apagada
+/// (todo uso normal) nunca la llevan.
 /// </summary>
-public readonly record struct GestureEvent(long Sequence, long Timestamp, GestureEventKind Kind, ScreenPoint Point, CancelCause Cause);
+public readonly record struct GestureEvent(long Sequence, long Timestamp, GestureEventKind Kind, ScreenPoint Point, CancelCause Cause, bool SyntheticWindow = false);
 
 public sealed record HookStatusInfo(bool Attempted, bool Installed, int Win32Error);
 

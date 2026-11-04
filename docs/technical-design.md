@@ -1,6 +1,6 @@
-# Radial — Documento técnico v0.12
+# Radial — Documento técnico v0.17
 
-Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 está en curso y NO está aprobada: se han hecho sus pasos 1 y 2 y está escrito el paso 3 (ejecutores de aplicación, archivo, carpeta y URL), este último SIN VERIFICAR: Smart App Control bloqueó las pruebas de Windows y de Core del paso 3; ver 17.8** (contratos de ejecución de acciones y reloj de producción; parser de atajos; ejecutores; sección 17). Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (pasos 1 a 3 de la fase 4); todo lo demás sigue siendo diseño.
+Estado: **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **La fase 4 (overlay real y acciones: pasos 1 a 3, 4.1 y 4.2) está implementada, con pruebas automáticas cuya única ejecución de GitHub Actions verificada (verde, commit `349fbde`, anterior a la 4.1; cifras 622 Core / 522 Windows comunicadas por el usuario) no cubre el código de la 4.1, la 4.2 ni el cierre técnico (las cifras de los informes de la 4.1 y 4.2 no están confirmadas por CI, 15.5) y con validación manual básica del usuario en un equipo; se presenta para su aprobación expresa y NO está aprobada** (resumen de lo probado y lo pendiente en 17.11). El código del cierre técnico (17.12) y la protección contra la navegación no soportada (17.13) están escritos y subidos, **sin ejecutar ni confirmar todavía por CI**. Los submenús están **implementados en el núcleo y pendientes de integrar en el overlay (fase 5)**. Persisten limitaciones sin validar (DPI distintos del 125 %, varios monitores, aplicaciones elevadas, bordes de pantalla, 25H2, rendimiento medido...) que no impiden el cierre técnico pero no deben darse por probadas. Lo implementado está en las secciones 14 (núcleo), 16 (captura global) y 17 (fase 4); todo lo demás sigue siendo diseño.
 
 Convención: **[Comprobado]** = verificado con documentación oficial o en este equipo. **[Por validar]** = propuesta que debe confirmarse con un prototipo o prueba.
 
@@ -8,7 +8,11 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 
 | Versión | Cambios |
 |---|---|
-| v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
+| **v0.17** | **Cierre de la auditoría de la fase 4** (nueva 17.13). Código: protección temporal contra la navegación entre menús no soportada por el overlay (`RadialOverlayCoordinator.UnsupportedNavigation`) y pruebas específicas. Workflow de CI: se lanza con push a cualquier rama, con `pull_request` y con `workflow_dispatch`. Documentación sincronizada: README, menú provisional de 17.9, orden del historial, cifras de pruebas (qué está confirmado por CI y qué es solo cifra de informe) y regla de qué se puede lanzar en el equipo de desarrollo. **Los submenús siguen sin estar integrados en el overlay (fase 5).** La fase 4 sigue pendiente de aprobación expresa. |
+| **v0.16** | **Cierre técnico de la fase 4 tras la auditoría I1–I6** (nueva 17.12). Código: lector resiliente del canal (I1) y aislamiento de suscriptores del coordinador (I2); liberación comprobada y con un reintento en `SendInputKeyboardInjector` y código `KeyReleaseFailed` (I4); marca `GestureEvent.SyntheticWindow` publicada por el servicio como barrera central contra la autoprueba (I5, campo aditivo en la fase 3); `TargetPolicy` en los ejecutores de aplicación, archivo y carpeta y código `TargetNotAllowed` (I6, parte inmediata); primer plano nulo ⇒ `ForegroundChanged`; cierre robusto de la ventana. I3 queda como **limitación documentada** (sin detección de destino elevado). Según el informe de cierre, compilado en Release sin avisos; **pruebas nuevas no ejecutadas localmente (Smart App Control) ni confirmadas por CI** (su compilación y ejecución las valida GitHub Actions). La fase 4 sigue pendiente de aprobación expresa. |
+| v0.15 | **Cierre documental de la fase 4** (nueva sección 17.11; solo documentación, sin cambios de código). Se registra la validación manual del usuario de las fases 4.1 y 4.2, se separan pruebas automáticas, manuales y pendientes, y se resuelven las contradicciones sobre Smart App Control y dónde se ejecutan las pruebas: la validación automática de referencia es **GitHub Actions** (nueva 15.5); el equipo de desarrollo sigue sin lanzar las pruebas de Windows. **Corrección posterior (misma versión):** la última ejecución de CI confirmada es de **622 Core / 522 Windows**; 660/574 (4.1) y 694/855 (4.2) son cifras de los informes de implementación, sin procedencia confirmada, y no se presentan como resultado de CI. Estado de la fase 4 y de su fila en la sección 12 actualizados: implementada y validada parcialmente, **pendiente de aprobación expresa**. |
+| v0.14 | Fase 4.2: **motor de acciones y primeros atajos funcionales** (17.10). `ShortcutActionExecutor` (un único ejecutor para todos los atajos, con la espera de 3.4), `SendInputKeyboardInjector` y `Win32ModifierStateReader` en `Radial.Windows`; `ActionDefinition`/`ActionCatalog`/`BuiltInShortcuts` y `CompositeActionExecutor` en Core; el coordinador ejecuta la acción confirmada y el menú provisional tiene ocho acciones reales. Códigos de error nuevos: `ModifiersNotReleased`, `ForegroundChanged`, `InputInjectionFailed`, `UnexpectedError`. Precisión sobre 3.4 (la espera se sondea, no usa `ChordTracker`). Sin validación manual todavía. La fase 4 no está aprobada. |
+| v0.13 | Fase 4.1: **primera interfaz radial visible** (17.9). `RadialLayout` en Core; colocación y estilos del overlay (`OverlayPlacement`, `OverlayWindowInterop`) y `RadialOverlayCoordinator` en `Radial.Windows`; `OverlayWindow`, `RadialView` y un menú provisional de ocho elementos en `Radial.App`. El overlay muestra el radial con el gesto real y resalta el sector bajo el cursor; **no ejecuta acciones**. Sin cambios en la captura global ni en sus protecciones. Sin validación manual todavía. La fase 4 no está aprobada. |
 | **v0.12** | Fase 4, **paso 3** (de varios): `IProcessLauncher`, `ShellProcessLauncher` y los ejecutores de aplicación, archivo, carpeta y URL en `Radial.Windows` (17.7). **`OpenUrlAction` solo admite `http` y `https`** (se retira `mailto:`), con una única definición en Core (`OpenUrlAction.AllowedSchemes`). Códigos de error nuevos: `TargetNotFound`, `LaunchFailed`, `UrlNotAllowed`. **Verificación incompleta:** Smart App Control bloqueó la carga de `Radial.Windows.Tests.dll` y, tras el ajuste de URL, de `Radial.Core.Tests.dll` (17.8). El paso 3 no está aprobado ni la fase 4. |
 | v0.11 | Corrección del paso 2: el vocabulario de teclas de un atajo (66 nombres) tiene **una única fuente de verdad en `Radial.Core`** (`KeyVocabulary`). `SendKeysAction` lo usa para validar y `ShortcutParser` (Windows) solo asigna códigos VK y `Extended`; se acabó la incoherencia entre validar y poder ejecutar (17.6). Se eliminó `SendKeysAction.MaxKeyLength`. La fase 4 no está aprobada. |
 | v0.10 | Fase 4, **paso 2** (de varios): parser de atajos (`ShortcutParser`) en `Radial.Windows`, con vocabulario cerrado de 66 teclas (17.5). Solo traducción a códigos de tecla virtual: sin envío de teclas, sin P/Invoke, sin cambios en `Radial.Core` ni en la captura global. La fase 4 no está aprobada. |
@@ -19,6 +23,7 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 | v0.5 | Fase 2 cerrada con cobertura parcial (un monitor al 125 %, una ejecución válida). Overlay de producción: **ventana layered de WPF (variante A)**, sin Acrylic, Mica ni técnicas DWM; el blur deja de ser requisito del MVP ([ADR-001](adr/ADR-001-overlay-rendering.md)). Nueva sección 10 con resultados y anomalías sin explicar, y sección 15 sobre Smart App Control. Fases 4 y 7 y el criterio 9 del MVP actualizados. |
 | v0.4 | Fase 1 implementada: modelo de dominio, geometría, histéresis, motor, submenús y validador en `Radial.Core`. La fórmula de normalización de la sección 5 se corrige para reflejar el código (`%` con corrección explícita). Nueva sección 14. Cambios de diseño respecto a v0.3 listados en 14.6. |
 | v0.3 | Compatibilidad oficial: **Windows 11 x64 estable 25H2+**, sin Windows 10. Corrección: la build 26300 es Windows 11 **26H2**, disponible en el canal de disponibilidad general desde el 29-sep-2026, no una build Insider. E-1 (bordes) vuelve a **abierto** con alternativas documentadas. Timeout de atajos 5 s configurable. Primera escritura por creación y siguientes por reemplazo atómico. Estrategia explícita para acciones de tipo desconocido. Eliminada la resincronización con `GetAsyncKeyState` en callbacks. Resultados de la fase 0. |
+| v0.2 | Ctrl primero obligatorio, geometría normalizada, DPI con `GetDpiForWindow`, hooks con eventos críticos en orden, almacenamiento en `%LOCALAPPDATA%`, spike de blur, fases 0 a 8. |
 
 ## 1. Compatibilidad y entorno
 
@@ -94,6 +99,7 @@ Esc o soltar Ctrl antes de confirmar cancela. Si el botón central se pulsa **si
 - **Timeout predeterminado: 5 s, configurable.** Si se supera: se cancela la acción, se informa al usuario y no se emite ninguna tecla.
 - No se manipula el estado de Ctrl artificialmente. Hacerlo exigiría una justificación técnica y pruebas específicas que hoy no existen.
 - La espera se detecta con los eventos del propio `ChordTracker`, sin sondeo en callbacks. Si hay que sondear (ej. cancelación por timeout), se hace fuera del callback.
+- **Cómo se implementó (fase 4.2, 17.10):** `ChordTracker` solo conoce Ctrl y el botón central, y no se modifica; la espera cubre los cuatro modificadores («el Ctrl de activación y cualquier otro»), así que se **sondea** con `GetAsyncKeyState` fuera de los hooks (`IModifierStateReader`), cada 10 ms, y se compara también la ventana en primer plano antes de enviar. No es una contradicción de la regla (el sondeo está previsto fuera del callback), pero sí una precisión de «con los eventos de `ChordTracker`».
 
 ## 4. Máquina de estados
 
@@ -145,7 +151,7 @@ Estrategia aceptada: **ventana layered de WPF** (ADR-001, variante A del spike).
 - `WM_MOUSEACTIVATE → MA_NOACTIVATE`: el spike lo usó y el clic sobre el overlay no lo activó; no se midió su aportación por separado.
 - El click-through se aplica añadiendo `WS_EX_TRANSPARENT` sobre la ventana layered. `WM_NCHITTEST → HTTRANSPARENT` **no** dejó pasar el clic al receptor (otro proceso) en las variantes en que se probó (A, C, D y E; en B se omitió) y no debe usarse. Si el radial necesita el click-through siempre (la interacción se resuelve con los hooks y no con el ratón sobre la ventana) o solo en ciertos estados, se decide en la fase 4.
 - Foco: se comprueba con `GetForegroundWindow` antes y después de mostrar; en el spike no cambió en ninguna variante.
-- **[Por validar en la fase 4]** que transparencia, click-through y no activación siguen funcionando juntas en la implementación definitiva.
+- **[Parcialmente validado en la fase 4, 17.11]** que transparencia, click-through y no activación siguen funcionando juntas en la implementación definitiva: los estilos y el foco se comprobaron con `--overlay-check` (un monitor al 125 %) y el usuario comprobó a mano que el overlay se ve y que los atajos llegan a la aplicación de destino; **el efecto real del click-through (que un clic atraviese el overlay) no se ha comprobado**.
 - **No se usa** Acrylic, Mica ni ninguna técnica DWM (`DWMWA_SYSTEMBACKDROP_TYPE`, `SetWindowRgn` sobre material, `SetWindowCompositionAttribute`). **No hay blur.**
 
 ### 6.2 DPI (PerMonitorV2)
@@ -317,7 +323,7 @@ La plantilla de xUnit incluía `coverlet.collector`; se **retiró** por no ser n
 | **1** Núcleo | Geometría, motor, máquina de estados con submenús y retroceso, modelo, validación. La serialización y las acciones desconocidas (7.1) pasan a la fase 5, donde existe el almacenamiento. | Pruebas de las secciones 4 y 5 en verde. | ✅ **Completada** (sección 14) |
 | **2** Spike de ventana | Variantes A–E, informe y ADR. | Tabla de resultados y decisión registrada. | ✅ **Cerrada con cobertura parcial** (sección 10, ADR-001). Smart App Control interrumpió los experimentos pendientes (sección 15). |
 | **3** Captura global | Hilo de hooks, `ChordTracker`, watchdog, diagnóstico. | Ctrl→botón activa; botón→Ctrl no activa y el clic llega a la aplicación; la rueda no activa; Esc y soltar Ctrl cancelan; sin retraso perceptible del ratón. | ✅ **Aprobada** (sección 16). Pruebas automáticas, autoprueba con entrada sintética sobre hooks reales y prueba manual con hardware: correctas. Sin validar: bloqueo/suspensión reales, otros DPI, varios monitores, 25H2 (16.12). |
-| **4** Overlay real + acciones | Overlay con la **variante A** (ventana layered de WPF, sección 6.1), `RadialView`, ejecutores (app, archivo, carpeta, URL, atajo diferido). | El foco no cambia; transparencia, click-through y no activación funcionan **a la vez**; se ejecuta una acción real; el atajo espera a soltar Ctrl y vence a los 5 s; DPI y monitores comprobados o documentados como pendientes. | Pendiente |
+| **4** Overlay real + acciones | Overlay con la **variante A** (ventana layered de WPF, sección 6.1), `RadialView`, ejecutores (app, archivo, carpeta, URL, atajo diferido). | El foco no cambia; transparencia, click-through y no activación funcionan **a la vez**; se ejecuta una acción real; el atajo espera a soltar Ctrl y vence a los 5 s; DPI y monitores comprobados o documentados como pendientes. | ✅ **Implementada y validada parcialmente; pendiente de aprobación expresa** (secciones 17 y 17.11). Automáticas: la única ejecución de CI verificada (verde, commit `349fbde`, anterior a la 4.1; cifras 622 Core / 522 Windows comunicadas por el usuario) no cubre el código de la 4.1, la 4.2 ni el cierre técnico; las cifras de 4.1 (660/574) y 4.2 (694/855) vienen de los informes de implementación y no están confirmadas por CI (15.5); 8 acciones y overlay probados a mano por el usuario. Submenús: implementados en el núcleo, pendientes de integrar en el overlay (protección temporal en 17.13). **Sin validar:** efecto real del click-through, vencimiento de 5 s con el gesto real, DPI distintos del 125 %, varios monitores, aplicaciones elevadas, bordes de pantalla (E-1), 25H2, rendimiento medido. |
 | **5** Submenús + configuración | Interfaz del dwell con progreso, serialización JSON con acciones desconocidas (7.1), `config.json` en `%LOCALAPPDATA%`, bandeja con "Salir". **→ MVP.** | Dos niveles estables; archivo corrupto no rompe la app; E-1 evaluado con los criterios de 6.4. | Pendiente |
 | **6** Ajustes y editor | Ventana de ajustes, editor del radial con vista previa. | El ejemplo completo del enunciado se configura solo desde la interfaz. | Pendiente |
 | **7** Apariencia y sistema | Temas, colores, autoarranque, instancia única. Sin blur (ADR-001). | Apariencia configurable con el panel translúcido oscuro. | Pendiente |
@@ -513,6 +519,17 @@ El análisis del grafo es iterativo: una cadena de 50 000 menús no desborda la 
 ### 15.4 Estado durante la fase 3
 
 El preflight de la fase 3 comprobó antes de tocar nada: SDK, compilación en Release, `dotnet test` y arranque de `Radial.App`. **No hubo ningún bloqueo.** Los binarios nuevos de las fases 3 (`Radial.Windows.dll`, `Radial.App.dll`, las pruebas) también se compilaron, se ejecutaron y no aparecieron eventos de Code Integrity. No se modificó ninguna configuración de seguridad. Esto no cambia el riesgo de 15.3: que no se haya bloqueado aquí no demuestra que no ocurra en otro equipo ni en otra compilación.
+
+### 15.5 Estado durante la fase 4: dónde se validan las pruebas
+
+Esta sección unifica lo que 17.8, 17.9 y 17.10 decían por separado.
+
+- **Paso 3 (17.8):** Smart App Control bloqueó `Radial.Windows.Tests.dll` y `Radial.Core.Tests.dll` (compilaciones nuevas, `0x800711C7`). Sigue siendo cierto, y la regla se mantiene: **en el equipo de desarrollo no se vuelven a lanzar las pruebas de Windows, no se recompila para conseguir que un binario cargue y no se afirma como superado lo que no se ha ejecutado.** No se desactivó Smart App Control ni se tocó ninguna política.
+- **Validación automática de referencia: GitHub Actions** (`.github/workflows/radial-windows-validation.yml`, runner `windows-latest`, independiente del equipo de desarrollo). Compila la solución completa en Release y ejecuta `Radial.Core.Tests` y `Radial.Windows.Tests`. Se lanza con cada `push` a cualquier rama, con `pull_request` y con `workflow_dispatch` (este último solo se puede lanzar desde la interfaz de GitHub cuando el archivo existe en la rama predeterminada; hasta entonces el disparador efectivo es el push). Hasta la v0.16 solo se lanzaba con push a `validation/fase-4-paso-3`. No firma nada, no cambia opciones de compilación y no ejecuta aplicaciones (las pruebas usan lanzadores e inyectores falsos).
+- **Ejecuciones de CI verificadas en la API pública de GitHub (v0.17), solo estado, sin cifras:** (1) ejecución nº 1, commit `9ce8129`, 2026-11-03: **fallo** en el paso de `Radial.Windows.Tests` (compilación y `Radial.Core.Tests` correctos); el commit siguiente, `349fbde` («Fix URL error message assertion»), corrige la aserción; (2) **ejecución nº 2, commit `349fbde` (el último commit antes del cierre de la fase 4), 2026-11-03: conclusión `success`**, con compilación, `Radial.Core.Tests` y `Radial.Windows.Tests` en verde — <https://github.com/xrbrr24/Radial/actions/runs/41624193526>. Esa ejecución es anterior a la 4.1, la 4.2 y el cierre técnico: **no cubre nada de ese código**. Los números de pruebas de cada suite solo constan en el resumen de la ejecución y en los artefactos TRX (`resultados-core`, `resultados-windows`, retención de 14 días), que GitHub no entrega sin autenticación: las cifras **622 Core / 522 Windows** son las que comunicó el usuario y **no se han podido comprobar desde aquí**. Observación (deducción aritmética, no confirmada): 622 = 660 − 38 y 522 = 574 − 52, es decir, las cifras que 17.9 da para la 4.1 menos las pruebas que la 4.1 añadió; es coherente con que esa ejecución cubriera el código anterior a la 4.1. No se reconcilia con las **571** de Core que 17.8 anotó para el paso 3 (ejecución local anterior al bloqueo): la diferencia no está explicada en el repositorio, así que ninguna de esas cifras se usa para deducir cobertura.
+- **Cifras comunicadas por los informes de implementación, NO confirmadas por CI:** **660 Core / 574 Windows** (informe de la 4.1, 17.9) y **694 Core / 855 Windows** (informe de la 4.2, 17.10). Los informes las anotaron como «última ejecución local»; no consta si salieron del equipo de desarrollo, de otro entorno o de CI, ni existe commit o enlace asociado. Se conservan como histórico, pero **no deben citarse como resultados de GitHub Actions**. Mientras no se confirmen, las pruebas automáticas de la 4.1 y la 4.2 (en especial las 281 de Windows de la 4.2) figuran como **no verificadas por CI**.
+- **Aplicación en el equipo de desarrollo:** el usuario ha ejecutado `Radial.App` y realizado las pruebas manuales de 17.11 sin que se registrara un bloqueo. Eso no cambia el riesgo de 15.3: que un binario cargue una vez no demuestra que otra compilación, ni los ensamblados de pruebas, no se bloqueen, y no se ha determinado por qué el comportamiento varía.
+- **Referencia vigente.** Lo único confirmado por CI es la ejecución nº 2 sobre `349fbde` (estado verde; cifras 622 / 522 comunicadas por el usuario). Para confirmar la 4.1, la 4.2 y el cierre técnico hay que consultar la ejecución del workflow sobre el commit que las contiene (el commit de cierre de la v0.17, subido a `validation/fase-4-paso-3`) y anotar aquí commit, enlace y cifras reales. Hasta entonces, 660/574 y 694/855 son cifras de informe.
 
 ## 16. Fase 3: captura global de teclado y ratón
 
@@ -763,9 +780,9 @@ Lo siguiente **no se ha comprobado** y no debe darse por probado:
 - Comportamiento bajo carga prolongada; eliminación del hook de teclado por Windows (sin detección).
 - Smart App Control: no hubo bloqueos en la fase 3, pero no demuestra que no ocurran en otro equipo o compilación (15.3).
 
-## 17. Fase 4 (en curso): pasos 1 a 3
+## 17. Fase 4: overlay real y acciones (pasos 1 a 3, 4.1 y 4.2)
 
-**Estado: los pasos 1 y 2 de la fase 4 están implementados y verificados; el paso 3 está implementado y compila, pero SIN VERIFICAR (17.8). La fase 4 no está aprobada** y sus criterios de aceptación (sección 12) no han cambiado ni se han evaluado. Ningún paso es visible para el usuario todavía: los ejecutores del paso 3 existen, pero nada los invoca (no hay coordinador ni overlay). Los apartados 17.1 a 17.4 son el paso 1, el 17.5 y el 17.6 el paso 2 y su corrección, y el 17.7 y el 17.8 el paso 3.
+**Estado: implementada y validada parcialmente; pendiente de aprobación expresa del usuario.** Los pasos 1 y 2 se verificaron al cerrarlos; el paso 3 quedó sin verificar en el equipo de desarrollo por el bloqueo de Smart App Control (17.8); su verificación en GitHub Actions depende de la ejecución confirmada de 622 / 522, que no tiene commit asociado en el repositorio (15.5). Las pruebas automáticas de la 4.1 y la 4.2 no están confirmadas por CI. Los criterios de aceptación de la sección 12 no han cambiado; su evaluación está en 17.11. Hasta la 4.1 (17.9) ningún paso era visible para el usuario; con ella aparece el overlay y con la 4.2 (17.10) el radial ejecuta las acciones elegidas (ocho acciones reales provisionales). Los apartados 17.1 a 17.4 son el paso 1, el 17.5 y el 17.6 el paso 2 y su corrección, el 17.7 y el 17.8 el paso 3, el 17.9 la 4.1, el 17.10 la 4.2 y el **17.11 el resumen de cierre** (automático / manual / pendiente).
 
 ### Paso 1: contratos de ejecución de acciones y reloj de producción
 
@@ -876,7 +893,7 @@ Decisiones y observaciones:
 
 ### 17.7 Paso 3: ejecutores de aplicación, archivo, carpeta y URL
 
-**Estado: escrito y compila (0 advertencias, 0 errores). NO verificado: ver 17.8.** Nada invoca todavía a estos ejecutores (no hay coordinador).
+**Estado al cerrar el paso 3: escrito y compila (0 advertencias, 0 errores); sin verificar en el equipo de desarrollo (17.8).** *(Actualizado en la v0.15: desde la 4.2 el coordinador los invoca; las pruebas se ejecutan en GitHub Actions (ejecución verde sobre `349fbde`, cifras 622 / 522 comunicadas por el usuario, 15.5); en la validación manual del usuario funcionaron abrir una carpeta, una URL y una aplicación.)*
 
 **Piezas en `Radial.Windows/Actions`** (públicas, para que `Radial.App` las componga a mano):
 
@@ -924,3 +941,286 @@ Decisiones y observaciones:
 - Ejecutar las pruebas de Windows (348 anteriores y todas las nuevas) y las de Core con el código actual, en un entorno donde se puedan cargar: otro equipo o una compilación firmada. La firma de código se evalúa en la fase 8 (15.2), con la restricción de coste.
 - Algunas pruebas nuevas dependen de cómo analiza .NET ciertas direcciones (p. ej. `http://exa mple.com` o `https://[no-es-ipv6` como mal formadas); si alguna falla al ejecutarse, es una expectativa de la prueba que hay que revisar, no necesariamente un defecto del ejecutor. Se retiraron dos entradas cuya expectativa no se podía respaldar (`http:///solo-ruta`, `http:/example`).
 - Validación manual del lanzador real (`ShellProcessLauncher` solo se ha probado con el arranque inyectado): abrir una aplicación, un archivo, una carpeta y una dirección web en un equipo donde se pueda ejecutar, y comprobar los fallos (destino inexistente, archivo sin aplicación asociada).
+
+*(Nota de la v0.13, corregida en la v0.15: este apartado describe el estado al cerrar el paso 3 y se conserva como histórico. Las pruebas de Core y de Windows se ejecutaron después; la referencia de validación es GitHub Actions (cifras confirmadas y cifras solo de informe, distinguidas en 15.5). La limitación del equipo de desarrollo —no lanzar allí las pruebas de Windows— se mantiene.)*
+
+### 17.9 Fase 4.1: primera interfaz radial visible
+
+**Estado: implementada y compilada; comprobada con pruebas automáticas, con una comprobación del overlay real sin entrada y, desde la v0.15, con la validación manual básica del usuario (17.11). Lo que sigue sin validar está en la lista de abajo y en 17.11.** No cambia el comportamiento de la captura global ni sus protecciones. En la 4.1 el radial no ejecutaba acciones (solo informaba de la elegida); la ejecución se añadió en la 4.2 (17.10). Quedan fuera submenús, persistencia y editor (fases posteriores).
+
+**Qué se añadió**
+
+| Dónde | Tipo | Función |
+|---|---|---|
+| `Radial.Core/Geometry` | `RadialLayout`, `SectorShape` | Disposición pura del dibujo: los cuatro vértices de cada sector anular y el punto de su etiqueta, con los mismos ángulos que `RadialGeometry` (norte = 0°, horario). Lo dibujado en una dirección es lo que el motor selecciona para un cursor sobre ese dibujo (prueba). |
+| `Radial.Windows/Overlay` | `OverlayPlacement` | Cálculo puro: tamaño físico (par, para que el cursor caiga en el píxel central) y rectángulo centrado en el cursor. No ajusta a los bordes (E-1, opción A: sin ajuste). |
+| `Radial.Windows/Overlay` | `OverlayWindowInterop` | Parte Win32 sin WPF: añade `WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW \| WS_EX_TRANSPARENT`, lee los estilos, coloca según la secuencia de 6.2 (`GetDpiForWindow` del monitor de destino), contesta `WM_MOUSEACTIVATE` con `MA_NOACTIVATE`. P/Invoke aparte, en `Native/WindowNativeMethods.cs`; `NativeMethods` no se tocó. |
+| `Radial.Windows/Overlay` | `RadialOverlayCoordinator`, `IRadialPresenter` | Une gesto, motor y ventana: `Activated` → muestra el menú raíz sobre el cursor; el cursor se lee periódicamente y resalta el sector; `Confirmed`/`Cancelled` → oculta e informa (`Completed`/`Aborted`). No sabe de WPF. Mide en DIP relativos al centro (píxeles físicos ÷ escala del monitor), de modo que el radio de la zona central de la configuración coincide con el del botón central dibujado a cualquier DPI. |
+| `Radial.App/Overlay` | `OverlayWindow` | La ventana (ADR-001, variante A): `AllowsTransparency`, sin borde, `Topmost`, `ShowActivated=false`, `Focusable=false`. Se crea y prepara una vez al arrancar y se reutiliza. Implementa `IRadialPresenter`. |
+| `Radial.App/Overlay` | `RadialView`, `RadialTheme`, `GlyphCatalog` | El dibujo: disco oscuro translúcido, ocho sectores con `StreamGeometry` (no botones), botón central, icono (Segoe Fluent Icons con Segoe MDL2 Assets de respaldo) y etiqueta por sector. El sector resaltado cambia de relleno, borde, color de icono y etiqueta, crece 8 DIP hacia fuera y una marca del botón central apunta a él. Sin degradados, sombras ni efectos: grafito con un único acento frío. |
+| `Radial.App/Overlay` | `ProvisionalMenu` | Ocho elementos **fijos y provisionales**, sin grupos ni submenús. En la 4.1 eran solo marcadores sin acción real (Navegador, Carpeta, Notas, Calculadora, Ajustes, Copiar, Pegar, Buscar); **desde la 4.2 son las ocho acciones reales de 17.10** (Copiar, Pegar, Deshacer, Seleccionar todo, Guardar, Carpeta, Web, Navegador). Se sustituye por la configuración cargada en la fase 5. |
+| `Radial.App` | `MainWindow` | Reenvía los eventos del gesto al coordinador y lo sondea cada 15 ms mientras haya un radial. La captura se sigue iniciando con el botón «Iniciar captura»: no arranca sola. |
+
+**Decisiones**
+
+| Decisión | Motivo |
+|---|---|
+| El coordinador está en `Radial.Windows`, no en la interfaz | «Sin lógica de negocio en código de interfaz»; se prueba con un presentador falso, sin WPF y sin Windows real. |
+| Click-through (`WS_EX_TRANSPARENT`) **siempre** activo | La interacción se resuelve con los hooks, nunca con el ratón sobre la ventana (pendiente de 6.1). Todavía no hay nada en el overlay que necesite recibir clics. |
+| Sin `WM_NCHITTEST → HTTRANSPARENT` | No deja pasar el clic a otro proceso (6.1). |
+| La ventana se coloca con `Opacity = 0`, se muestra, se vuelve a colocar y entonces `Opacity = 1` | WPF puede situar la ventana por su cuenta en la primera aparición; no debe verse ese fotograma. |
+| El cursor se lee con un `DispatcherTimer` (15 ms) y la confirmación usa la posición del evento de soltar | `CompositionTarget.Rendering` no se dispara de forma continua si la escena no cambia (6.3); el evento de soltar lleva la posición exacta. |
+| Aislamiento durante la autoprueba: `Isolate()` / `Resume()` | La entrada sintética no debe mostrar el overlay (taparía la zona de prueba y falsearía sus comprobaciones de ventana). Los eventos que la autoprueba deja sin leer se descartan al reanudar por su marca de tiempo (`Stopwatch`). Sin supervisión (`--selftest`) el coordinador nace aislado. |
+| Un fallo del overlay se registra y se contiene | La ventana de diagnóstico es el único lector del canal de eventos (sin límite): si el bucle muriera, el canal dejaría de vaciarse. |
+
+**Verificación**
+
+| Qué | Resultado |
+|---|---|
+| `dotnet build -c Release` (solución completa) | Correcta: 0 advertencias, 0 errores |
+| Pruebas de Core *(cifra del informe de la 4.1; procedencia no registrada, **no confirmada por CI**, ver 15.5)* | **660 superadas**, 0 fallos (38 nuevas: `RadialLayout`) |
+| Pruebas de Windows *(ídem)* | **574 superadas**, 0 fallos (52 nuevas: colocación del overlay y coordinador, incluidos el aislamiento y el descarte por marca de tiempo) |
+| Comprobación del overlay real (`Radial.App.exe --overlay-check <archivo>`) | Superada en un monitor al 125 % (120 DPI): estilos `0x080800A8` (layered, transparente al ratón, sin activación, ventana de herramienta, topmost) sin cambios al mostrar; ventana de 526 px (420 DIP × 1,25) con el centro **exactamente** en el cursor; `GetForegroundWindow` igual antes y después de mostrar; `IsActive = false` |
+| Aspecto (`Radial.App.exe --render-preview <archivo.png>`) | Dibujo en reposo y con dos sectores resaltados revisado a partir del PNG |
+
+`--overlay-check` y `--render-preview` son herramientas de desarrollo: no instalan hooks, no inyectan entrada ni hacen clics (el click-through no se prueba con clics sintéticos). Comprueban el estado de la ventana, no sustituyen la prueba con ratón.
+
+**Sin validar (no afirmar que funciona)** *(lista escrita al cerrar la 4.1; el estado actual de cada punto está en 17.11 y los puntos que el usuario ya probó llevan la nota correspondiente)*
+- ~~El gesto real (Ctrl + botón central) mostrando el overlay con hardware~~ → **probado a mano por el usuario** (17.11, M1–M3): el overlay aparece, se seleccionan sectores y desaparece al confirmar o cancelar. Siguen sin detallarse el método de cancelación ni las aplicaciones usadas.
+- Que el clic **atraviesa** realmente el overlay hacia la ventana de debajo (solo se comprobó el estilo `WS_EX_TRANSPARENT`, no el efecto).
+- Foco con aplicaciones reales (el overlay no se activa según el estilo y según `GetForegroundWindow` justo después de mostrar; no se ha medido con aplicaciones concretas, pantalla completa exclusiva ni ventanas elevadas).
+- DPI de 100, 150 y 200 %, varios monitores con escalados distintos, cambio de monitor a mitad del gesto (el coordinador usa la escala del monitor donde se mostró; si el cursor cruza a otro monitor con distinto DPI durante el gesto, la medida queda desfasada) y `WM_DPICHANGED` real.
+- Comportamiento en los bordes de la pantalla (E-1, opción A): el radial puede quedar parcialmente fuera y los sectores exteriores ser inalcanzables.
+- Windows 11 estable 25H2 (solo 26H2).
+- Rendimiento medido: el objetivo de 6.3 (del gesto al primer fotograma ≤ 100 ms) no se ha medido con este overlay.
+- Los iconos de archivo (`IconSource.File`) no se dibujan: se muestra un glifo neutro.
+
+**Cómo probarlo a mano**
+1. `dotnet build -c Release` y `dotnet run -c Release --project src/Radial.App` (o ejecutar `Radial.App.exe`).
+2. Pulsar **Iniciar captura** y comprobar que «Hook de teclado» y «Hook de ratón» están instalados. La fila «Overlay (estilos)» muestra los estilos reales de la ventana.
+3. Abrir otra aplicación (p. ej. el Bloc de notas), dejar el cursor sobre ella y mantener **Ctrl**, pulsar el **botón central** y mantenerlo: el radial aparece centrado en el cursor.
+4. Mover el ratón: el sector bajo el cursor se resalta (borde azul, relleno más claro, icono azul) y la marca del botón central apunta a él. En el centro no hay ninguno resaltado.
+5. Foco: el título de la ventana de la otra aplicación sigue activo y se puede seguir escribiendo en ella.
+6. Soltar el botón central oculta el radial y la ventana de diagnóstico registra `[radial] confirmado: «…»` (en la 4.1 no se ejecutaba nada; desde la 4.2 se ejecuta la acción, ver 17.10). **Esc** o soltar **Ctrl** antes de confirmar registra `[radial] cancelado (...)`.
+7. Click-through: con el radial visible, ver que el cursor y la aplicación de debajo siguen respondiendo (p. ej. el cursor de texto del Bloc de notas); no usar entrada sintética.
+8. **Autoprueba**: lanzar «Autoprueba (entrada sintética)» y comprobar que no aparece el radial (el coordinador permanece aislado) y que la autoprueba da los mismos resultados que antes.
+
+### 17.10 Fase 4.2: motor de acciones y primeros atajos funcionales
+
+**Estado: implementada y compilada; pruebas automáticas: 694 Core / 855 Windows según el informe de esta subfase, **sin confirmar por GitHub Actions** (15.5); validación manual básica del usuario realizada (17.11): las ocho acciones funcionan con el gesto real. Siguen sin validar los puntos de la lista de abajo y de 17.11.** El `SendInput` real no se ha ejecutado desde ninguna prueba automática (las pruebas usan un inyector falso, a propósito: no se inyecta entrada real sobre el escritorio); su única validación es la manual del usuario. No cambia `GlobalInputService`, los hooks, `ChordTracker`, `GuardedSyntheticInput` ni la autoprueba.
+
+**Auditoría previa (resumen).** `SendKeysAction` ya validaba con `KeyVocabulary` (66 teclas) y representaba los modificadores con `KeyModifiers` (flags `Control`, `Shift`, `Alt`, `Windows`); `ShortcutParser` ya traducía a VK. **La espera de liberación de modificadores solo existía como diseño (3.4), no como código**; `ChordTracker` solo conoce Ctrl, así que la espera se sondea (precisión añadida a 3.4). `IActionExecutor` y los cuatro ejecutores de apertura se reutilizan tal cual; el coordinador no ejecutaba nada. `SyntheticInput` es de la autoprueba y no se reutiliza. No hay conflicto con la arquitectura: nada de lo pedido contradice el diseño.
+
+**Qué se añadió**
+
+| Dónde | Tipo | Función |
+|---|---|---|
+| `Radial.Core/Execution` | `CompositeActionExecutor` | Elige el ejecutor de cada acción por `CanExecute` (el «registro» de la sección 8). Sin comportamiento propio. |
+| `Radial.Core/Execution` | 4 códigos en `ActionErrorCodes` | `ModifiersNotReleased`, `ForegroundChanged`, `InputInjectionFailed`, `UnexpectedError`. |
+| `Radial.Core/Catalog` | `ActionDefinition`, `ActionCategory`, `ActionCatalog`, `BuiltInShortcuts` | Estructura del repertorio: id estable, nombre, categoría, descripción, icono y acción (tipo + parámetros). Distintas definiciones comparten ejecutor. `ActionCatalog` valida y rechaza ids repetidos. `BuiltInShortcuts`: Copiar, Pegar, Deshacer, Seleccionar todo y Guardar. |
+| `Radial.Windows/Shortcuts` | `ShortcutActionExecutor` | **El** ejecutor de atajos (ver abajo). |
+| `Radial.Windows/Shortcuts` | `ShortcutSequence` (interno) | Traducción pura atajo → secuencia de eventos: modificadores en orden fijo (Ctrl, Mayús, Alt, Win), tecla, y liberación en orden inverso. Ctrl+Mayús+S o Win+E son datos distintos de la misma función. |
+| `Radial.Windows/Shortcuts` | `IKeyboardInjector`, `SendInputKeyboardInjector` | Envío con `SendInput` (API documentada) de la secuencia completa en **una** llamada. Sin `dwExtraInfo`: no lleva `SyntheticMarker`, así que los hooks la descartan por inyectada incluso con `AcceptOwnSyntheticInput`. Si Windows acepta solo parte, suelta lo que quedó pulsado y devuelve el fallo. |
+| `Radial.Windows/Shortcuts` | `IModifierStateReader`, `Win32ModifierStateReader` | Estado físico de Ctrl, Mayús, Alt y Win (`GetAsyncKeyState`, solo lectura, fuera de los hooks). |
+| `Radial.Windows/Overlay` | `RadialOverlayCoordinator` | Nuevo: ejecuta el elemento confirmado con un `IActionExecutor`, sin bloquear, y publica `ActionFinished`; mantiene una acción pendiente cancelable. |
+| `Radial.App` | `ActionExecutors` | Raíz de composición: los cuatro ejecutores de apertura (un único `ShellProcessLauncher`) y el de atajos, detrás de un `CompositeActionExecutor`. |
+| `Radial.App/Overlay` | `ProvisionalMenu`, `ProvisionalTargets`, `GlyphCatalog` | Las ocho acciones reales y sus iconos (ver abajo); destinos provisionales aislados en `ProvisionalTargets`. |
+
+**Contrato del ejecutor de atajos** (orden fijo; nada se envía antes del último paso)
+1. Acción de otro tipo → `UnsupportedAction`. Token ya cancelado → `Cancelled`.
+2. `GetProblems()` de Core no vacío, o tecla sin traducción → `InvalidAction`; no se lee ningún estado ni se envía nada, y el mensaje no repite el texto introducido.
+3. Se espera a que se suelten los **cuatro** modificadores físicos (el Ctrl del gesto y cualquier otro), sondeando cada 10 ms. No se pulsa ni se suelta nada artificialmente. Vence a los 5 s (configurable, `ShortcutExecutorOptions`) → `ModifiersNotReleased` indicando cuáles siguen pulsados. Cancelable → `Cancelled`.
+4. Si la ventana en primer plano cambió desde el principio de la ejecución → `ForegroundChanged`: el atajo iba para la aplicación que había al confirmar.
+5. Una sola secuencia con `IKeyboardInjector`; si el sistema la rechaza → `InputInjectionFailed` (con el código de Windows).
+Después de enviar ya no se puede cancelar. Un fallo previsible se devuelve, no se lanza.
+
+**Las ocho acciones del menú** (provisional)
+
+| Posición | Acción | Id | Tipo / destino |
+|---|---|---|---|
+| Norte | Copiar | `edit.copy` | `SendKeysAction` Ctrl+C |
+| Noreste | Pegar | `edit.paste` | `SendKeysAction` Ctrl+V |
+| Este | Deshacer | `edit.undo` | `SendKeysAction` Ctrl+Z |
+| Sureste | Seleccionar todo | `edit.select-all` | `SendKeysAction` Ctrl+A |
+| Sur | Guardar | `edit.save` | `SendKeysAction` Ctrl+S |
+| Suroeste | Carpeta | `files.folder` | `OpenFolderAction`: carpeta Documentos del usuario (**provisional**) |
+| Oeste | Web | `web.url` | `OpenUrlAction`: `https://www.wikipedia.org` (**provisional**) |
+| Noroeste | Navegador | `web.browser` | `LaunchApplicationAction`: `msedge.exe` bajo `Archivos de programa (x86)` (**provisional**) |
+
+Los destinos no se inventan: salen de carpetas conocidas del sistema. Una carpeta que no existe da `TargetNotFound` (la comprueba el ejecutor antes de lanzar), una aplicación que no se encuentra da `TargetNotFound` (la devuelve el lanzador) y una URL que no es `http`/`https` da `UrlNotAllowed` o `InvalidAction`. Todo fallo se comunica en el registro y en la fila «Última acción» de la ventana de diagnóstico; no hay cuadros de mensaje (robarían el foco al destino del atajo) ni notificaciones todavía.
+
+**Decisiones**
+
+| Decisión | Motivo |
+|---|---|
+| Una clase de ejecutor para todos los atajos | El atajo es dato (`KeyChord`), no comportamiento; un repertorio amplio no exige código. |
+| La espera sondea `GetAsyncKeyState` en lugar de usar `ChordTracker` | Hay que cubrir Mayús, Alt y Win, que `ChordTracker` no conoce (y es de la captura protegida). El sondeo está fuera de los callbacks, como prevé 3.4. |
+| Se compara la ventana en primer plano antes de enviar | Evita que un atajo pensado para una aplicación llegue a otra si el usuario cambió de ventana mientras esperaba. |
+| `SendInputKeyboardInjector` sin la marca de la autoprueba | Separación clara con la captura: los hooks lo ignoran siempre. Reutilizar `SyntheticInput` habría mezclado ambos mundos. |
+| Una acción pendiente se cancela al empezar otro gesto, al aislar y al cerrar | Un atajo que espera no debe dispararse más tarde, ya fuera de contexto. |
+| El coordinador captura cualquier excepción del ejecutor como `UnexpectedError` | Una tarea que nadie espera perdería el fallo en silencio. |
+| Durante la autoprueba no se ejecuta nada | El coordinador aislado ignora los eventos antes de tocar el motor o el ejecutor. |
+
+**Verificación**
+
+| Qué | Resultado |
+|---|---|
+| Pruebas de Core *(cifra del informe de la 4.2; procedencia no registrada, **no confirmada por CI**, ver 15.5)* | **694 superadas**, 0 fallos (34 nuevas: catálogo, ejecutor compuesto, códigos) |
+| Pruebas de Windows *(ídem)* | **855 superadas**, 0 fallos (281 nuevas: secuencias de los 16 conjuntos de modificadores con 6 teclas, inyector con la llamada al sistema sustituida —éxito, parcial, nada aceptado, sin marca—, ejecutor —combinaciones, espera, vencimiento, cancelación, validación, foco, fallos— y coordinador con acciones —incluidas ausencia de ejecución aislado y descarte tras la autoprueba—) |
+| Compilación | La aplicación y los dos proyectos de pruebas compilan en Release sin advertencias. **La compilación de la solución completa se hizo con `Radial.App` en un directorio de salida aparte** porque había una instancia de Radial en ejecución bloqueando sus DLL (no se cerró: era del usuario) |
+| Overlay real (`--overlay-check`) y aspecto (`--render-preview`) | Igual que en 4.1: estilos `0x080800A8`, centrado exacto, foco sin cambios; el menú de ocho acciones se revisó en el PNG (la etiqueta «Seleccionar todo» ocupa dos líneas) |
+
+**Sin validar (no afirmar que funciona)** *(lista escrita al cerrar la 4.2; estado actual en 17.11)*
+- ~~El `SendInput` real y cada una de las ocho acciones con el gesto real y un destino real~~ → **probado a mano por el usuario** (17.11, M4–M6): las cinco de teclado, Documentos, Wikipedia y Microsoft Edge funcionan. No se detalló en qué aplicaciones de destino, y los caminos de fallo (`TargetNotFound`, `ModifiersNotReleased`...) no se probaron a mano.
+- Aplicaciones destino elevadas (UIPI): Windows puede descartar el teclado sin que `SendInput` lo indique; el fallo no es detectable.
+- Atajos que Windows trata especialmente: `Alt+Tab` y `Win+E` se envían, pero su efecto no se ha comprobado; `Ctrl+Alt+Supr` no se puede enviar. Ninguno forma parte del menú actual.
+- Aplicaciones que leen el teclado por scancode o con entrada sin procesar (algunos juegos): el envío usa códigos de tecla virtual.
+- Carrera residual: entre la última comprobación de modificadores y el envío (microsegundos) el usuario podría pulsar otra tecla; no es atómico, como la inyección de la autoprueba (16.9).
+- Los avisos al usuario (bandeja, notificaciones) son de fases posteriores: hoy los fallos solo se ven en la ventana de diagnóstico.
+- Todo lo ya listado como sin validar en 17.9 (DPI, varios monitores, bordes, 25H2, rendimiento).
+
+**Cómo probarlo a mano** (ejecutar `Radial.App`, pulsar «Iniciar captura» y poner **otra aplicación en primer plano**; el teclado va a la ventana activa). Gesto: mantener Ctrl, pulsar el botón central, mover al sector, soltar el botón central y **después** soltar Ctrl.
+- **Copiar / Pegar / Deshacer / Seleccionar todo / Guardar:** en el Bloc de notas con texto: Seleccionar todo (selecciona), Copiar, mover el cursor y Pegar (pega), Deshacer (revierte), y Guardar (abre «Guardar como» o guarda). Esperado en el registro: `[acción] «…»: correcta` justo al soltar Ctrl.
+- **Espera de modificadores:** confirmar un atajo y mantener Ctrl más de 5 s → `FALLÓ (ModifiersNotReleased) … Siguen pulsadas estas teclas…: Ctrl` y no llega nada a la aplicación.
+- **Navegador:** abre Edge. **Web:** abre la dirección en el navegador predeterminado. **Carpeta:** abre Documentos en el Explorador.
+- **Fallo comunicado:** renombrar temporalmente la carpeta Documentos no es necesario; basta con cambiar `ProvisionalTargets` a una ruta inexistente y comprobar `FALLÓ (TargetNotFound)`.
+- **Cancelación:** Esc o soltar Ctrl antes de confirmar → `[radial] cancelado` y no se ejecuta nada. Con un atajo esperando (Ctrl pulsado), empezar otro gesto cancela el primero (`[acción] … cancelada`).
+- **Autoprueba:** no aparece el radial y no se ejecuta ninguna acción.
+
+### 17.11 Cierre de la fase 4: qué está probado y qué no
+
+**Resumen de la v0.15 (solo documentación; ni código ni pruebas cambiaron).** Separa tres cosas que antes estaban mezcladas: lo que comprueban las **pruebas automáticas**, lo que el usuario ha **probado a mano** y lo que **sigue pendiente**. Lo que no aparece en las dos primeras tablas no se considera comprobado.
+
+**Procedencia.** Las pruebas manuales las hizo el usuario con el gesto real y hardware y las comunicó en su informe; no las observó el asistente que redacta esto. El informe no recoge la versión de Windows concreta, la configuración de pantallas ni las aplicaciones de destino usadas; esos datos **no constan** y no se suponen. Las cifras de CI confirmadas (622 / 522) también son del informe del usuario; las de 660/574 y 694/855 vienen de los informes de implementación y no están confirmadas (15.5).
+
+#### A. Pruebas automáticas
+
+| Qué | Resultado | Origen |
+|---|---|---|
+| `Radial.Core.Tests` | Suite en verde; **622** superadas según el usuario | **GitHub Actions**, ejecución nº 2 sobre `349fbde` ([enlace](https://github.com/xrbrr24/Radial/actions/runs/41624193526)): el estado verde está verificado en la API de GitHub; la cifra la comunicó el usuario y no es comprobable sin autenticación. **Código anterior a la 4.1** |
+| `Radial.Windows.Tests` | Suite en verde; **522** superadas según el usuario | Ídem |
+| `Radial.Core.Tests` (informe de la 4.1 / de la 4.2) | 660 / **694** superadas | **Comunicado por el informe de implementación; NO confirmado por CI**; procedencia no registrada |
+| `Radial.Windows.Tests` (informe de la 4.1 / de la 4.2) | 574 / **855** superadas | **Comunicado por el informe de implementación; NO confirmado por CI**; procedencia no registrada |
+| Compilación Release de la solución completa | Sin advertencias ni errores al cerrar la 4.2 | Equipo de desarrollo (anotado en 17.10); CI la repite en cada ejecución |
+| `--overlay-check` (un monitor al 125 %, 120 DPI) | Estilos `0x080800A8`, centrado exacto en el cursor, `GetForegroundWindow` sin cambios, `IsActive = false` | Equipo de desarrollo; herramienta sin hooks ni entrada (17.9) |
+| `--render-preview` | Aspecto del radial en reposo y con sectores resaltados, revisado a partir del PNG | Equipo de desarrollo (17.9, 17.10) |
+
+Qué cubren las pruebas de la 4.1 y la 4.2 (según los informes; **sin confirmar por CI**): disposición del dibujo frente al motor (`RadialLayout`), colocación del overlay, coordinador con presentador falso (aislamiento, descarte por marca de tiempo, acción pendiente y su cancelación, excepciones del ejecutor), catálogo y ejecutor compuesto, secuencias de teclado de los 16 conjuntos de modificadores, `SendInputKeyboardInjector` con la llamada al sistema sustituida (éxito, parcial, rechazo, sin marca), `ShortcutActionExecutor` con inyector y lector de modificadores falsos (espera, vencimiento, cancelación, validación, cambio de foco, fallos) y los ejecutores de aplicación, archivo, carpeta y URL con un lanzador falso.
+
+**Lo que las pruebas automáticas NO cubren, por diseño:** el `SendInput` real, `ShellProcessLauncher` real (solo con arranque inyectado), el renderizado de WPF, los hooks reales y el efecto del click-through. No se inyecta entrada real sobre el escritorio (CLAUDE.md).
+
+#### B. Pruebas manuales realizadas (por el usuario)
+
+| Id | Prueba | Resultado |
+|---|---|---|
+| M1 | Con el gesto real (Ctrl + botón central) aparece el overlay radial de ocho sectores | Correcto |
+| M2 | Mover el cursor permite seleccionar sectores | Correcto |
+| M3 | El overlay desaparece al confirmar y al cancelar | Correcto. No se detalló el método de cancelación (Esc o soltar Ctrl) |
+| M4 | Acciones de teclado: Copiar, Pegar, Deshacer, Seleccionar todo, Guardar | Correctas (primera validación del `SendInput` real) |
+| M5 | Carpeta: abre Documentos | Correcto |
+| M6 | Web: abre Wikipedia en el navegador predeterminado | Correcto |
+| M7 | Navegador: abre Microsoft Edge | Correcto |
+
+*Inferencia, no prueba específica:* que los atajos del punto M4 llegaran a la aplicación de destino sugiere que el overlay no le quitó el foco y que la espera a soltar Ctrl (sin llegar al vencimiento) funciona en el uso normal. No se midió el foco ni se probó con aplicaciones concretas, y el vencimiento de 5 s no se probó a mano.
+
+#### C. Pendiente o limitaciones conocidas
+
+| Id | Qué falta | Nota |
+|---|---|---|
+| P1 | **Efecto real del click-through** (que un clic atraviese el overlay) | Solo se comprobó el estilo `WS_EX_TRANSPARENT`; no se prueba con clics sintéticos |
+| P2 | Foco medido con aplicaciones concretas, pantalla completa o ventanas elevadas | Solo `--overlay-check` en el escritorio |
+| P3 | Vencimiento de 5 s con el gesto real (`ModifiersNotReleased`) | Solo pruebas automáticas con relojes falsos |
+| P4 | Caminos de fallo a mano: `TargetNotFound`, `UrlNotAllowed`, `ForegroundChanged`, `InputInjectionFailed` y su aviso en la ventana de diagnóstico | Solo automáticas |
+| P5 | Cancelación con Esc y con soltar Ctrl por separado; cancelación de una acción pendiente al empezar otro gesto | Solo automáticas (M3 no distingue el método) |
+| P6 | Autoprueba con entrada sintética tras la 4.1/4.2: que el radial no aparezca y no se ejecute nada (17.9 paso 8, 17.10) | No consta que se haya repetido a mano |
+| P7 | DPI del 100 %, 150 % y 200 % | Solo el 125 % en comprobaciones sin entrada |
+| P8 | Varios monitores, cambio de monitor a mitad del gesto y `WM_DPICHANGED` real | El coordinador usa la escala del monitor donde se mostró |
+| P9 | **Aplicaciones de destino elevadas (UIPI)** | Windows puede descartar el teclado sin avisar; el fallo no es detectable |
+| P10 | Bordes y esquinas de la pantalla (E-1, opción A) | Sectores exteriores pueden ser inalcanzables |
+| P11 | Juegos y pantalla completa exclusiva; aplicaciones que leen el teclado por scancode o entrada sin procesar | |
+| P12 | `Alt+Tab` y `Win+E` | Se envían, efecto sin comprobar; no están en el menú |
+| P13 | Windows 11 estable 25H2 | Solo 26H2 |
+| P14 | Rendimiento medido (objetivo de 6.3: ≤ 100 ms del gesto al primer fotograma) | Sin medir con este overlay |
+| P15 | Iconos de archivo (`IconSource.File`) | Se muestra un glifo neutro |
+| P16 | Avisos al usuario (bandeja, notificaciones) | Fases posteriores; hoy los fallos solo se ven en la ventana de diagnóstico |
+| P17 | Archivo abierto con `OpenFileAction` y aplicación con argumentos | El menú provisional no los usa; solo automáticas |
+| P18 | Riesgos residuales de 17.7 (destinos tipo protocolo, ejecutables por asociación, rutas relativas) | Decidir antes de importar configuraciones (fase 8) |
+| P19 | Smart App Control | Riesgo de distribución sin resolver (15.3); firma y confianza en la fase 8 |
+| P20 | **Fijar la versión aprobada**: anotar el commit y el enlace de la ejecución de CI que cubra el código de la fase 4 | La única ejecución verificada (nº 2, `349fbde`) es anterior a la 4.1; el commit de cierre de la v0.17 contiene todo el código de la fase 4 y debe consultarse su ejecución |
+| P21 | **Confirmar con GitHub Actions las pruebas de la 4.1, la 4.2, I1–I6 y la protección de 17.13** (660/574 y 694/855 son cifras de informe) | Requiere consultar la ejecución del workflow sobre el commit de cierre (v0.17); acción del usuario si GitHub no entrega los resultados sin autenticación |
+
+#### D. Criterios de aceptación de la fase 4 (sección 12)
+
+| Criterio | Evaluación |
+|---|---|
+| El foco no cambia | **Cumplido en lo probado**: estilos y `GetForegroundWindow` sin cambios (`--overlay-check`) y atajos recibidos por la aplicación de destino (M4, inferencia). Sin medir con aplicaciones concretas ni elevadas (P2, P9) |
+| Transparencia, click-through y no activación **a la vez** | **Parcial**: transparencia y no activación comprobadas (estilos, aspecto, M1); el click-through, solo como estilo (P1) |
+| Se ejecuta una acción real | **Cumplido** (M4–M7) |
+| El atajo espera a soltar Ctrl y vence a los 5 s | **Espera: cumplida en el uso normal (inferencia de M4). Vencimiento: solo automático** (P3) |
+| DPI y monitores comprobados o documentados como pendientes | **Documentados como pendientes** (P7, P8) |
+
+#### E. Estado de la fase 4
+
+Implementada, con validación manual básica correcta y con las pruebas automáticas de la 4.1 y la 4.2 **pendientes de confirmación por CI** (única ejecución verificada: verde sobre `349fbde`, anterior a la 4.1; cifras 622 / 522 comunicadas por el usuario). **Pendiente de aprobación expresa del usuario** (reglas de trabajo de CLAUDE.md): el estado pasará a «aprobada» solo cuando el usuario lo confirme, indicando la versión (P20). No se avanza a la fase 5 hasta entonces. Las limitaciones P1–P19 y P21 no se consideran resueltas por este cierre. *(Actualizado en 17.12: el cierre técnico posterior a la auditoría cambia el código; ver allí qué hay escrito, qué no se ha ejecutado y qué sigue pendiente; y en 17.13 la protección contra la navegación no soportada).*
+
+### 17.12 Cierre técnico de la fase 4: auditoría I1–I6 (v0.16)
+
+**Alcance y procedencia.** Tras la auditoría de las fases 4.1/4.2 se corrigieron los hallazgos que pertenecen al cierre de la fase 4 (I1, I2, I4, I5 y la parte inmediata de I6), se resolvió I3 con una decisión documentada y se auditaron foco, tiempos, overlay, DPI y apagado. **Estado de verificación, sin mezclar:**
+
+| Qué | Estado |
+|---|---|
+| Compilación Release de la solución (0 avisos, 0 errores) | **Comprobada en el equipo de desarrollo** (salida a una carpeta temporal, porque `Radial.App` estaba en ejecución y bloqueaba su `bin`) |
+| Pruebas automáticas nuevas de este cierre (33 métodos, 56 casos con `InlineData`; sin contar las de I1/I2 anteriores; detalle en la tabla) | **Escritas; según el informe de cierre compiladas, no ejecutadas** (Smart App Control impide lanzarlas en este equipo, 17.8) y **NO confirmadas por CI**. No se dan cifras totales nuevas: el recuento estático de atributos no equivale al que informa el ejecutor de pruebas |
+| Comportamiento real (hooks, `SendInput`, overlay, apagado) | **Sin probar a mano** tras estos cambios |
+| Fase 3 | `GlobalInputService` y `GestureEvent` reciben **un campo aditivo** (I5, abajo). `LowLevelHookHost`, `ChordTracker`, `GuardedSyntheticInput`, `SyntheticMarker` y la autoprueba **no se modificaron** |
+
+**Hallazgos y decisiones**
+
+| Id | Decisión | Implementación | Pruebas nuevas |
+|---|---|---|---|
+| **I1** lector del canal | Resuelto (ya hecho antes de esta sección) | `GestureEventReader`: un fallo por evento se notifica y el bucle sigue; N fallos seguidos (10) lo detienen y se comunican; la cancelación es el final esperado. `MainWindow` supervisa la tarea y muestra su estado | 14 (`GestureEventReaderTests`) |
+| **I2** suscriptores | Resuelto (ya hecho antes) | `Completed` y `ActionFinished` se invocan suscriptor a suscriptor; `SubscriberFailed` los comunica | 8 (coordinador) |
+| **I3** UIPI / elevación | **No se implementa detección. Limitación documentada** | Ver «I3» abajo. Cambio de redacción: la ventana de diagnóstico dice «aceptada por Windows (no se comprueba que la aplicación la procese)», no «correcta» | — |
+| **I4** teclas atascadas | Resuelto | `SendInputKeyboardInjector`: la liberación se comprueba, se reintenta UNA vez la parte que falte y, si sigue sin entrar, se informa (`KeyInjectionResult.ReleaseFailed` → código `KeyReleaseFailed`). Si la llamada lanza, se sueltan todas las teclas que la secuencia pulsa y se propaga la excepción | 10 (inyector) + 3 (ejecutor) |
+| **I5** autoprueba | Resuelto con una barrera central | `GestureEvent.SyntheticWindow`, fijado por el servicio al publicar | 5 (servicio) + 4 (coordinador) |
+| **I6** destinos | **Parte inmediata resuelta; el resto bloqueado para la fase 5** | `TargetPolicy` en los ejecutores. Ver «I6» abajo | 26 + 4 + 1 |
+
+**I3 — por qué no hay detección.** La documentación de `SendInput` dice que está sujeta a UIPI y que ni el valor devuelto ni `GetLastError` indican que fue UIPI quien lo bloqueó. Radial solo puede saber que **Windows aceptó** la secuencia. Detectar un destino elevado exigiría abrir el proceso de la ventana en primer plano y leer su token; desde un proceso sin elevar, esa lectura falla con «acceso denegado» tanto para una aplicación elevada como para procesos protegidos, de otro usuario o del sistema. Convertir «no se pudo leer» en «elevada» sería una heurística que **no se ha podido verificar** en este equipo y que bloquearía atajos legítimos con falsos positivos; no se presenta como garantía. **Comportamiento correcto hoy:** Radial envía, informa «aceptada por Windows» y **nunca afirma que la aplicación procesó la entrada**. Queda en P9 con su procedimiento de prueba (abajo). Si el producto necesitara avisar, la vía sería una decisión de diseño de la fase 5/7 con prueba manual con una aplicación elevada real (p. ej. el Administrador de tareas).
+
+**I4 — qué se garantiza y qué no.** `SendInput` devuelve cuántos eventos insertó, contando desde el primero. Con la secuencia `+Ctrl +C -C -Ctrl` en una sola llamada: si entran 0 no hay nada que soltar; si entran 1 a 3 se envían las liberaciones de lo pulsado en orden inverso; se comprueba cuántas entraron y se reintenta una vez las que falten (nunca en bucle). **No se puede garantizar:** (1) el teclado limpio si el sistema rechaza también la liberación y su reintento (entonces `KeyReleaseFailed` pide al usuario pulsar y soltar los modificadores); (2) que un modificador que el usuario vuelva a pulsar físicamente en los milisegundos entre la espera y el envío no se mezcle con el atajo; (3) cancelar una vez enviado. Soltar una tecla que no estaba pulsada es inocuo, por eso en el caso de excepción (se ignora cuántas entraron) se sueltan todas las de la secuencia. No se hicieron pruebas con teclado real: todo con una llamada al sistema falsa.
+
+**I5 — análisis y barrera.** Hasta ahora la protección era un booleano de la interfaz (`Isolate()`/`Resume()` más el descarte por marca de tiempo): correcto pero dependiente de que cada ruta de código lo recordara. Con `AcceptOwnSyntheticInput` activo, los eventos de la autoprueba producen `GestureEvent` idénticos a los reales. **Nueva barrera:** `GlobalInputService.Write` copia `AcceptOwnSyntheticInput` en `GestureEvent.SyntheticWindow` **dentro del mismo cerrojo** con el que el tracker procesó el evento; el campo viaja con el evento en el canal, así que aunque se lea después de apagar la aceptación (aislamiento levantado «demasiado pronto», eventos pendientes en el canal, parada del servicio durante la autoprueba) `RadialOverlayCoordinator.Handle` lo ignora. Las tres barreras (marca del evento, `Isolate`, descarte por marca de tiempo) son independientes y se conservan. Es un campo **aditivo con valor por defecto**; el contrato de la fase 3 no cambia. Efecto colateral aceptado: un gesto físico real durante la ventana de la autoprueba también se ignora (la autoprueba pide no tocar nada). Cierre de la aplicación: el lector se cancela, `Dismiss` cancela la acción pendiente y oculta el overlay y después se libera el servicio, y el overlay se cierra en un `finally`.
+
+**I6 — qué se resuelve ahora.** En la fase 4 los destinos están en código (`ProvisionalTargets`, rutas absolutas de carpetas conocidas; URL fija): no hay un vector inmediato. Aun así, `TargetPolicy` fija el mínimo en el último punto antes de llamar al sistema, independiente de la configuración: **aplicaciones** → ruta absoluta o nombre de programa sin ruta ni «:» (`notepad.exe`); se rechazan rutas relativas, de unidad relativa, de dispositivo (`\\?\`, `\\.\`) y protocolos (`ms-settings:`, `shell:`, `file:`, `http:`) con `TargetNotAllowed`; el directorio de trabajo, si se indica, debe ser absoluto. **Archivos y carpetas** → una ruta relativa se trata como inexistente (`TargetNotFound`, nunca se resuelve contra el directorio de trabajo del proceso: `.` ya no abre «la carpeta actual») y una ruta de dispositivo da `TargetNotAllowed`. `http`/`https` en las URL no cambia. **Bloqueado para la fase 5 (importación/configuración):** política de qué tipos de archivo se pueden abrir (`OpenFile` ejecuta `.exe`, `.bat`, `.lnk`, `.js`... por asociación), qué hacer con rutas de red (UNC: absolutas, se aceptan hoy; pueden provocar autenticación en red), validación equivalente en `GetProblems()` de Core al cargar, advertencia al importar y nombres sin ruta (se resuelven con el orden de búsqueda del sistema; hay que decidir si la configuración los permite).
+
+**Foco y destino del atajo (auditoría, sin cambio de política).** El destino es la ventana en primer plano al empezar la ejecución, cuando el overlay ya se ocultó y nunca se activó (`WS_EX_NOACTIVATE`, `ShowActivated=false`, `WM_MOUSEACTIVATE → MA_NOACTIVATE`; `--overlay-check` midió «sin cambios» en el equipo de desarrollo, no con aplicaciones concretas). Se vuelve a comprobar justo antes de enviar; si cambió, `ForegroundChanged` y no se envía. **Decisión:** se mantiene la política «la ventana que tiene el foco al confirmar», no «la que lo tenía al activar el gesto»: capturar al activar obligaría a cambiar el contrato `IActionExecutor` o a cancelar acciones que no dependen del foco (abrir una URL). **Corrección:** ahora un primer plano nulo (`GetForegroundWindow() == 0`: transición de foco, ventana recién cerrada) hace fallar con `ForegroundChanged` en lugar de enviar a ninguna parte.
+
+**Tiempos y cancelación (auditoría, sin cambio de política).** Espera de 5 s por defecto, configurable, de Ctrl, Mayús, Alt y Win con `GetAsyncKeyState` fuera de los hooks; nunca se pulsa ni suelta un modificador; la cancelación (nuevo gesto, aislamiento, cierre) se atiende en cada sondeo y justo al terminar la espera; nada se envía tras una cancelación. Las pruebas existentes lo cubren con reloj y pausa falsos. Sin carreras nuevas encontradas.
+
+**Overlay y click-through (auditoría).** Estilos `WS_EX_LAYERED` (WPF), `NOACTIVATE`, `TOOLWINDOW` y `TRANSPARENT`, aplicados con `SetWindowPos(…SWP_FRAMECHANGED)` y releídos para comprobarlos; `HWND_TOPMOST` en cada colocación; se crea una vez, se oculta y se cierra solo al salir. El coordinador no conserva referencias entre gestos más allá del motor y la acción pendiente (cancelada al empezar otro gesto, aislar o descartar). **No verificado:** el efecto real del click-through (P1) y que `WindowFromPoint` ignore la ventana en la práctica: no se prueba con clics sintéticos. **Procedimiento manual pendiente (P1):** con el gesto mantenido sobre una ventana con un elemento claramente pulsable bajo un sector, soltar y comprobar que no se activó ningún elemento ni cambió el foco (el botón central ya lo consume el hook); repetir con el cursor sobre otra aplicación.
+
+**DPI y varios monitores (auditoría).** La colocación es un cálculo puro (`OverlayPlacement`) con pruebas para 100/125/150/175/200 %, coordenadas negativas (monitor a la izquierda o arriba) y desbordamiento en el borde (sin ajuste, E-1 opción A). La escala se fija una vez al mostrar (`Show` devuelve la del monitor donde quedó) y no cambia durante el gesto aunque el cursor cambie de monitor: es la decisión existente y se mantiene. `OnDpiChanged` recoloca con el cálculo propio. No hay hallazgos nuevos. **Sin probar en hardware:** 100/150/200 %, monitor secundario, cambio de monitor a mitad del gesto y `WM_DPICHANGED` real (P7, P8).
+
+**Apagado (auditoría).** Orden al cerrar la ventana: se detienen los temporizadores, se cancela el lector, `Dismiss` cancela la acción pendiente y oculta el overlay, se libera el servicio (hooks) y el overlay se cierra en un `finally`, de modo que un fallo al liberar el servicio ya no deja una ventana abierta que mantendría vivo el proceso. Cerrar a mitad de la autoprueba sigue aplazando el cierre (fase 3). **Sin probar a mano** (no se comprobó que el proceso termine en todos los casos).
+
+**Procedimientos manuales pendientes** (el usuario, con hardware): (1) autoprueba (`--selftest`) y comprobar que el radial no aparece y no se ejecuta ninguna acción (P6); (2) Ctrl+C hacia una aplicación **elevada** (Administrador de tareas con «Ejecutar como administrador»): esperado, Radial informa «aceptada por Windows» y no ocurre nada en la aplicación (P9); (3) ver la fila «Lector de eventos» de la ventana de diagnóstico; (4) vencimiento de 5 s con Ctrl mantenido (P3); (5) cerrar la aplicación durante un gesto y comprobar en el Administrador de tareas que `Radial.App.exe` desaparece.
+
+**Criterios de la misión y su estado.** Implementado en código, con pruebas escritas (su compilación y ejecución las valida CI): I1, I2, I4, I5, I6 (parte inmediata), `ForegroundChanged` ante primer plano nulo, apagado robusto. **Documentado como limitación:** I3. **Pendiente de confirmación por CI** (P21) y de las pruebas manuales anteriores. La fase 4 sigue **pendiente de aprobación expresa**.
+
+### 17.13 Protección temporal contra la navegación entre menús no soportada (v0.17)
+
+**Hallazgo de la auditoría.** `RadialEngine` ya sabe navegar (entrar en un submenú por permanencia, recentrar, volver por el centro armado; sección 14.5, pruebas desde la fase 1), pero `RadialOverlayCoordinator`, `IRadialPresenter`, `OverlayWindow` y `RadialView` solo representan el menú raíz: el coordinador llama a `Show` una vez, con el raíz, y no mira qué menú tiene el motor. Con un grupo en el menú, tras la permanencia el motor pasaría al submenú mientras la ventana seguía dibujando el raíz: el usuario vería resaltado un elemento del raíz y al soltar se ejecutaría otro, el del submenú. **Hoy no se alcanza en la aplicación** (el menú provisional tiene ocho acciones y ningún grupo), pero la API del coordinador acepta cualquier configuración válida.
+
+**Estado de los submenús, sin ambigüedad:** *implementados en el núcleo* (motor, validador, pruebas de Core); *no integrados en el overlay ni en la interfaz* (cambio de menú, recentrado de la ventana, indicador de progreso de la permanencia y vuelta atrás visibles): **fase 5**. Esta sección no los implementa.
+
+**Protección.** Después de cada actualización del cursor, `RadialOverlayCoordinator.Update` comprueba que el menú actual del motor es el que se presentó (misma instancia). Si no lo es:
+1. el motor se abandona y el overlay se oculta (`Close`);
+2. no se ejecuta nada y no se produce `Completed` ni `Aborted` para ese gesto;
+3. se avisa con el evento nuevo `UnsupportedNavigation` (con el identificador del menú al que habría pasado; la ventana de diagnóstico lo registra), siempre después de ocultar y soltar el motor, con el mismo aislamiento de suscriptores que el resto de eventos (I2);
+4. la selección del otro menú **no se comunica nunca al presentador**: la comprobación va antes de `SetSelection`.
+
+La comprobación también se hace con la posición del evento de soltar: `Confirm` aplica esa posición **antes** de confirmar y, si con ella el motor cambia de menú (la permanencia se completa en ese mismo instante), no confirma. Los eventos de soltar el botón central o Ctrl que lleguen después encuentran el motor inactivo y se ignoran como cualquier evento sin gesto activo, así que ninguna liberación puede ejecutar una acción de un menú que no se vio. Un gesto nuevo funciona con normalidad. Consecuencia aceptada: mantener el cursor sobre un grupo más del tiempo de permanencia (600 ms por defecto) cancela el gesto en lugar de abrir el submenú; mientras no haya grupos en el menú provisional, no ocurre.
+
+**Pruebas** (`RadialOverlayCoordinatorNavigationTests`, 11 métodos, coordinador con presentador, ejecutor y reloj falsos y un menú de dos niveles): entrar en el submenú cancela y oculta; antes de la permanencia no se bloquea; la selección del submenú no llega al presentador; soltar el botón central tras el bloqueo no ejecuta ni confirma; soltar Ctrl tras el bloqueo no informa nada más; sondear tras el bloqueo no hace nada; el evento de soltar que completa la permanencia no se confirma; soltar sobre un grupo antes de la permanencia no ejecuta nada y no es navegación no soportada; una acción del menú raíz se sigue ejecutando; un gesto nuevo tras el bloqueo funciona; un suscriptor defectuoso del evento nuevo se comunica sin romper la cancelación. **Estado: escritas, sin compilar ni ejecutar en el equipo de desarrollo (regla de 15.5) y sin confirmar por CI** hasta que se anote la ejecución sobre el commit que las contiene.
+
+**Cuándo retirarla.** Al integrar la navegación en el overlay (fase 5), esta cancelación se sustituye por la representación real del cambio de menú, con pruebas de esa navegación. Hasta entonces no debe quitarse.

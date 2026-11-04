@@ -382,8 +382,9 @@ public sealed class GlobalInputService : IDisposable
         SyncWatchdog();
     }
 
+    // Con _gate tomado (Publish): el estado de la aceptación sintética es el mismo con el que el tracker procesó el evento.
     private void Write(GestureEventKind kind, in ChordResult result, long timestamp) =>
-        _channel.Writer.TryWrite(new GestureEvent(++_sequence, timestamp, kind, result.Point, result.Cause));
+        _channel.Writer.TryWrite(new GestureEvent(++_sequence, timestamp, kind, result.Point, result.Cause, _tracker.AcceptOwnSyntheticInput));
 
     // Debe llamarse con _gate tomado. El watchdog solo corre mientras el gesto está ACTIVO: sin gesto no hay sondeo.
     private void SyncWatchdog()

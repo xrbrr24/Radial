@@ -22,7 +22,16 @@ public sealed class OpenFolderActionExecutor : ProcessActionExecutor<OpenFolderA
         [NotNullWhen(true)] out ProcessLaunchRequest? request,
         [NotNullWhen(false)] out ActionExecutionResult? failure)
     {
-        if (!Directory.Exists(action.Path))
+        var verdict = TargetPolicy.Classify(action.Path);
+        if (verdict == PathVerdict.Forbidden)
+        {
+            request = null;
+            failure = ActionExecutionResult.Failure(ActionErrorCodes.TargetNotAllowed, "La ruta de la carpeta no está permitida (ruta de dispositivo o flujo de datos alternativo).");
+            return false;
+        }
+
+        // Una ruta relativa («.», «..») dependería del directorio de trabajo del proceso: no se resuelve, se trata como inexistente.
+        if (verdict == PathVerdict.Relative || !Directory.Exists(action.Path))
         {
             request = null;
             failure = ActionExecutionResult.Failure(ActionErrorCodes.TargetNotFound, "La carpeta no existe o la ruta no es una carpeta.");

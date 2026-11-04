@@ -294,6 +294,91 @@ public class GlobalInputServiceTests : IDisposable
         Assert.Single(Drain());
     }
 
+    // Marca de la autoprueba en los eventos publicados (protección central: el consumidor no necesita recordar nada)
+
+    [Fact]
+    public void NormalGestures_NeverCarryTheSyntheticMark()
+    {
+        StartService();
+        Activate();
+        Send(RawInputEvent.MiddleUp(5, 5));
+        Activate();
+        _service.RequestCancel();
+
+        var events = Drain();
+
+        Assert.Equal(4, events.Count);
+        Assert.All(events, e => Assert.False(e.SyntheticWindow));
+    }
+
+    [Fact]
+    public void EveryEventPublishedWhileAcceptingSyntheticInput_CarriesTheMark()
+    {
+        StartService();
+        _service.AcceptOwnSyntheticInput = true;
+        Send(RawInputEvent.KeyDown(InputKey.LeftControl, ownSynthetic: true));
+        Send(RawInputEvent.MiddleDown(1, 1, ownSynthetic: true)); // Activated
+        Send(RawInputEvent.MiddleUp(2, 2, ownSynthetic: true)); // Confirmed
+        Send(RawInputEvent.MiddleDown(3, 3, ownSynthetic: true)); // Activated
+        _service.RequestCancel(); // Cancelled
+
+        var events = Drain();
+
+        Assert.Equal([GestureEventKind.Activated, GestureEventKind.Confirmed, GestureEventKind.Activated, GestureEventKind.Cancelled], events.Select(e => e.Kind));
+        Assert.All(events, e => Assert.True(e.SyntheticWindow));
+    }
+
+    [Fact]
+    public void TheMark_TravelsWithTheEvent_EvenIfItIsReadAfterTheAcceptanceWasTurnedOff()
+    {
+        // La autoprueba termina (aceptación apagada) y el lector aún no leyó lo que dejó en el canal.
+        StartService();
+        _service.AcceptOwnSyntheticInput = true;
+        Send(RawInputEvent.KeyDown(InputKey.LeftControl, ownSynthetic: true));
+        Send(RawInputEvent.MiddleDown(1, 1, ownSynthetic: true));
+        Send(RawInputEvent.MiddleUp(2, 2, ownSynthetic: true));
+        _service.AcceptOwnSyntheticInput = false;
+
+        var events = Drain();
+
+        Assert.Equal(2, events.Count);
+        Assert.All(events, e => Assert.True(e.SyntheticWindow));
+    }
+
+    [Fact]
+    public void ARealGestureAfterTheSelfTest_DoesNotCarryTheMark()
+    {
+        StartService();
+        _service.AcceptOwnSyntheticInput = true;
+        Send(RawInputEvent.KeyDown(InputKey.LeftControl, ownSynthetic: true));
+        Send(RawInputEvent.MiddleDown(1, 1, ownSynthetic: true));
+        Send(RawInputEvent.MiddleUp(2, 2, ownSynthetic: true));
+        Send(RawInputEvent.KeyUp(InputKey.LeftControl, ownSynthetic: true));
+        _service.AcceptOwnSyntheticInput = false;
+        Drain();
+
+        Activate(); // entrada física
+        var real = Drain().Single();
+
+        Assert.Equal(GestureEventKind.Activated, real.Kind);
+        Assert.False(real.SyntheticWindow);
+    }
+
+    [Fact]
+    public void ServiceStoppedCancellation_DuringTheSelfTest_CarriesTheMark()
+    {
+        StartService();
+        _service.AcceptOwnSyntheticInput = true;
+        Send(RawInputEvent.KeyDown(InputKey.LeftControl, ownSynthetic: true));
+        Send(RawInputEvent.MiddleDown(1, 1, ownSynthetic: true));
+
+        _service.Stop();
+
+        var cancelled = Drain().Single(e => e.Kind == GestureEventKind.Cancelled);
+        Assert.Equal(CancelCause.ServiceStopped, cancelled.Cause);
+        Assert.True(cancelled.SyntheticWindow);
+    }
+
     // Parada y reinicio durante un gesto
 
     [Fact]

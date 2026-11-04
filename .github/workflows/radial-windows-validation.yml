@@ -4,14 +4,23 @@ name: Radial - validacion en Windows
 # desarrollo (donde Smart App Control bloquea la carga de los ensamblados de pruebas, ver docs/technical-design.md 17.8).
 # No cambia ninguna opcion de compilacion, no firma nada y no ejecuta aplicaciones: las pruebas usan lanzadores falsos.
 
+# Cuando se ejecuta: en cada push a cualquier rama, en cada pull request (al abrirlo, actualizarlo o reabrirlo) y a mano.
+# workflow_dispatch solo aparece en la interfaz de GitHub (y se puede lanzar con la API o `gh workflow run`) cuando este archivo
+# existe en la rama predeterminada; mientras solo esté en una rama de desarrollo, el disparador efectivo es el push.
 on:
   workflow_dispatch:
   push:
     branches:
-      - validation/fase-4-paso-3
+      - "**"
+  pull_request:
 
 permissions:
   contents: read
+
+# Una ejecución nueva del mismo evento y la misma referencia sustituye a la anterior que siga en curso.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_NOLOGO: "true"

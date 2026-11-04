@@ -11,6 +11,8 @@ public class LaunchErrorCodesTests
         Assert.Equal("TargetNotFound", ActionErrorCodes.TargetNotFound);
         Assert.Equal("LaunchFailed", ActionErrorCodes.LaunchFailed);
         Assert.Equal("UrlNotAllowed", ActionErrorCodes.UrlNotAllowed);
+        Assert.Equal("TargetNotAllowed", ActionErrorCodes.TargetNotAllowed);
+        Assert.Equal("KeyReleaseFailed", ActionErrorCodes.KeyReleaseFailed);
     }
 
     [Fact]
@@ -23,6 +25,12 @@ public class LaunchErrorCodesTests
             ActionErrorCodes.TargetNotFound,
             ActionErrorCodes.LaunchFailed,
             ActionErrorCodes.UrlNotAllowed,
+            ActionErrorCodes.ModifiersNotReleased,
+            ActionErrorCodes.ForegroundChanged,
+            ActionErrorCodes.InputInjectionFailed,
+            ActionErrorCodes.KeyReleaseFailed,
+            ActionErrorCodes.TargetNotAllowed,
+            ActionErrorCodes.UnexpectedError,
         };
 
         Assert.Equal(codes.Length, codes.Distinct(StringComparer.Ordinal).Count());
@@ -33,7 +41,7 @@ public class LaunchErrorCodesTests
     {
         var fields = typeof(ActionErrorCodes).GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!).ToList();
 
-        Assert.Equal(5, fields.Count); // si se añade un código, esta prueba obliga a revisar la lista de arriba
+        Assert.Equal(11, fields.Count); // si se añade un código, esta prueba obliga a revisar la lista de arriba
         Assert.All(fields, code => Assert.Equal(code, ActionExecutionResult.Failure(code, "Mensaje.").Error!.Code));
     }
 }

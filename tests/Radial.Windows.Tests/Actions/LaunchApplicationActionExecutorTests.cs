@@ -72,6 +72,83 @@ public class LaunchApplicationActionExecutorTests
     }
 
     [Theory]
+    [InlineData("ms-settings:")] // protocolo del sistema
+    [InlineData("ms-settings:network")]
+    [InlineData("shell:Startup")]
+    [InlineData("file:///C:/Windows/notepad.exe")]
+    [InlineData("http://example.com/a.exe")]
+    [InlineData(@"\\?\C:\Windows\notepad.exe")] // ruta de dispositivo
+    [InlineData(@"\\.\pipe\algo")]
+    [InlineData("//?/C:/Windows/notepad.exe")]
+    [InlineData(@"\??\C:\Windows\notepad.exe")] // espacio de nombres del sistema
+    [InlineData(@"\/?\C:\Windows\notepad.exe")] // mezcla de barras
+    [InlineData(@"/\.\pipe\algo")]
+    [InlineData(@"C:\Apps\a.exe:flujo")] // flujo de datos alternativo
+    [InlineData(@"C:\Apps\a.exe::$DATA")]
+    [InlineData(@"\\servidor\recurso\a.exe:flujo")]
+    [InlineData(@".\programa.exe")] // dependerían del directorio de trabajo del proceso
+    [InlineData(@"..\programa.exe")]
+    [InlineData(@"subcarpeta\programa.exe")]
+    [InlineData("subcarpeta/programa.exe")]
+    [InlineData(@"\programa.exe")]
+    [InlineData("C:programa.exe")] // unidad relativa
+    [InlineData(".")]
+    [InlineData("..")]
+    public async Task ATargetThatIsNeitherAnAbsolutePathNorABareProgramName_IsNotAllowed_AndNothingIsLaunched(string target)
+    {
+        var (result, launcher) = await Run(new LaunchApplicationAction(target));
+
+        Assert.Equal(ActionExecutionStatus.Failed, result.Status);
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Apps\editor.exe")]
+    [InlineData(@"\\servidor\recurso\editor.exe")] // ruta de red: absoluta; qué hacer con ellas es decisión de la configuración (fase 5)
+    [InlineData("notepad.exe")]
+    [InlineData("calc")]
+    public async Task AnAbsolutePathOrABareProgramName_IsAllowed(string target)
+    {
+        var (result, launcher) = await Run(new LaunchApplicationAction(target));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(target, Assert.Single(launcher.Requests).Target);
+    }
+
+    [Theory]
+    [InlineData(@"relativo\carpeta")]
+    [InlineData(".")]
+    [InlineData(@"\\?\C:\Trabajo")]
+    [InlineData("ms-settings:")]
+    public async Task ARelativeOrDeviceWorkingDirectory_IsNotAllowed_AndNothingIsLaunched(string workingDirectory)
+    {
+        var (result, launcher) = await Run(new LaunchApplicationAction(@"C:\Apps\a.exe", WorkingDirectory: workingDirectory));
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Fact]
+    public async Task ThePolicyMessage_DoesNotRepeatTheTarget()
+    {
+        const string secret = @"subcarpeta-secreta\programa.exe";
+
+        var (result, _) = await Run(new LaunchApplicationAction(secret));
+
+        Assert.DoesNotContain("secreta", result.Error!.Message);
+    }
+
+    [Fact]
+    public async Task ThePolicy_IsCheckedAfterTheCoreValidation_SoAnInvalidActionStaysInvalid()
+    {
+        var (result, launcher) = await Run(new LaunchApplicationAction("ms-settings:\0"));
+
+        Assert.Equal(ActionErrorCodes.InvalidAction, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("a\0b")]

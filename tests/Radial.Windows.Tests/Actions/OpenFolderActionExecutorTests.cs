@@ -61,6 +61,50 @@ public class OpenFolderActionExecutorTests : IClassFixture<TempFileSystem>
     }
 
     [Theory]
+    [InlineData(".")] // existe, pero dependería del directorio de trabajo del proceso: no se resuelve
+    [InlineData("..")]
+    [InlineData(@".\")]
+    public async Task ARelativePathThatExists_IsTreatedAsNotFound_AndNothingIsLaunched(string path)
+    {
+        Assert.True(Directory.Exists(path)); // la premisa de la prueba: relativa y existente
+
+        var (result, launcher) = await Run(path);
+
+        Assert.Equal(ActionErrorCodes.TargetNotFound, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Fact]
+    public async Task ADevicePath_IsNotAllowed_EvenIfItNamesAnExistingFolder()
+    {
+        var (result, launcher) = await Run(@"\\?\" + _fs.ExistingFolder);
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Theory]
+    [InlineData(@"\??\")] // espacio de nombres del sistema
+    [InlineData(@"\/?\")] // mezcla de barras
+    [InlineData("//./")]
+    public async Task EveryFormOfDevicePrefix_IsNotAllowed(string prefix)
+    {
+        var (result, launcher) = await Run(prefix + _fs.ExistingFolder);
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Fact]
+    public async Task AColonOutsideTheDriveLetter_IsNotAllowed()
+    {
+        var (result, launcher) = await Run(_fs.ExistingFolder + ":flujo");
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Theory]
     [InlineData("<>|?*")]
     [InlineData("%USERPROFILE%")] // no se expanden variables de entorno
     [InlineData("ruta\\relativa\\que\\no\\existe")]

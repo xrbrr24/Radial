@@ -3,7 +3,13 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Radial.App.Diagnostics;
+using Radial.App.Overlay;
+using Radial.Core.Engine;
+using Radial.Core.Execution;
+using Radial.Core.Model;
+using Radial.Core.Timing;
 using Radial.Windows.Input;
+using Radial.Windows.Overlay;
 
 namespace Radial.App;
 
@@ -20,9 +26,16 @@ public partial class MainWindow : Window
     private readonly CancellationTokenSource _closing = new();
     private readonly Dictionary<string, TextBlock> _fields = [];
     private readonly string? _selfTestOutput;
+    private readonly OverlayWindow _overlay = new();
+    private readonly RadialOverlayCoordinator _coordinator;
+    private readonly GestureEventReader _reader;
+    private readonly DispatcherTimer _overlayPoll = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(15) };
     private CancellationTokenSource? _selfTestCancel;
     private bool _selfTestRunning;
     private bool _closeRequestedDuringSelfTest;
+    private Task? _readerTask;
+    private GestureReaderEnd? _readerEnd;
+    private string? _readerLastFailure;
 
     /// <param name="selfTestOutput">Si se indica, al cargar la ventana se ejecuta la autoprueba, se escribe el resultado en ese archivo y se cierra.</param>
     public MainWindow(string? selfTestOutput = null)
@@ -33,6 +46,30 @@ public partial class MainWindow : Window
         // Sin supervisión la ventana debe estar siempre encima: la autoprueba no inyecta nada si otra ventana tapa la zona de prueba.
         Topmost = selfTestOutput is not null;
         BuildStateGrid();
+
+        // El overlay se crea una vez, ahora, y se reutiliza. El coordinador reacciona a los gestos reales; la autoprueba sintética
+        // lo aísla (y sin supervisión nace aislado: no debe aparecer nada antes de que ella termine).
+        _overlay.Prepare();
+        _overlay.Diagnostic += line => AppendLine("[overlay] " + line);
+        _coordinator = new RadialOverlayCoordinator(ProvisionalMenu.Create(), new MonotonicClock(), _overlay, () => _service.LatestPointer, executor: ActionExecutors.Create());
+        _coordinator.Completed += result => AppendLine(
+            result.Kind == RadialResultKind.Execute
+                ? $"[radial] confirmado: «{result.Item!.Name}»"
+                : $"[radial] confirmado sin selección ({result.Reason})");
+        _coordinator.Aborted += cause => AppendLine($"[radial] cancelado ({cause})");
+        _coordinator.UnsupportedNavigation += target => AppendLine($"[radial] cancelado: el menú «{target.Value}» no se puede mostrar todavía (submenús pendientes de integrar en el overlay); no se ejecutó nada");
+        _coordinator.ActionFinished += OnActionFinished;
+        _coordinator.SubscriberFailed += (eventName, exception) => AppendLine($"[radial] ERROR en un suscriptor de {eventName}: {exception.GetType().Name}: {exception.Message}");
+        _reader = new GestureEventReader(_service.Events, ProcessGesture, OnReaderFailure);
+        _overlayPoll.Tick += (_, _) => PollRadial();
+        if (selfTestOutput is not null)
+        {
+            _coordinator.Isolate();
+        }
+
+        Set("Última acción", "ninguna");
+        var styles = _overlay.Styles;
+        Set("Overlay (estilos)", $"0x{styles.Raw:X8}  layered={styles.Layered}, click-through={styles.Transparent}, sin activar={styles.NoActivate}, herramienta={styles.ToolWindow}");
 
         // Lo que la aplicación recibe de verdad (para comprobar qué eventos se consumieron).
         PreviewMouseDown += (_, e) =>
@@ -62,7 +99,7 @@ public partial class MainWindow : Window
         Closing += OnWindowClosing;
         Loaded += async (_, _) =>
         {
-            _ = ReadEventsAsync();
+            _readerTask = SuperviseReaderAsync();
             if (_selfTestOutput is not null)
             {
                 await RunUnattendedSelfTestAsync(_selfTestOutput);
@@ -106,6 +143,7 @@ public partial class MainWindow : Window
             "Servicio", "Hook de teclado", "Hook de ratón", "Ctrl izquierdo", "Ctrl derecho", "Botón central", "Gesto (chord)",
             "Último evento", "Cursor (según el hook)", "Callbacks (teclado / ratón)", "Gestos (activ. / conf. / cancel.)",
             "Callback máximo (teclado / ratón)", "Callbacks lentos (≥ 50 ms)", "Actividad del ratón", "Última cancelación",
+            "Radial (overlay)", "Overlay (estilos)", "Última acción", "Lector de eventos",
         ];
 
         foreach (var name in names)
@@ -170,8 +208,13 @@ public partial class MainWindow : Window
             _ => "SIN EVENTOS PESE A MOVER EL CURSOR: el hook puede haber sido eliminado",
         });
         Set("Última cancelación", d.Cancellations == 0 ? "ninguna" : d.LastCancelCause.ToString());
+        Set("Radial (overlay)", _coordinator.IsIsolated ? "aislado (autoprueba en curso)" : _coordinator.IsActive ? "visible" : "oculto");
 
-        MessagesBox.Text = string.Join(Environment.NewLine, d.Errors.Select(e => "ERROR  " + e).Concat(d.Notices.Select(n => "AVISO  " + n)));
+        Set("Lector de eventos", DescribeReader());
+
+        var readerEnd = _readerEnd;
+        IEnumerable<string> readerProblem = readerEnd is { Reason: not GestureReaderEndReason.Cancelled } ? ["ERROR  " + ReaderStoppedMessage(readerEnd)] : [];
+        MessagesBox.Text = string.Join(Environment.NewLine, d.Errors.Select(e => "ERROR  " + e).Concat(readerProblem).Concat(d.Notices.Select(n => "AVISO  " + n)));
 
         StartButton.IsEnabled = d.State is CaptureState.Stopped or CaptureState.Faulted && !_selfTestRunning;
         StopButton.IsEnabled = d.State != CaptureState.Stopped && !_selfTestRunning;
@@ -187,19 +230,144 @@ public partial class MainWindow : Window
 
     private static string Pressed(bool value) => value ? "pulsado" : "suelto";
 
-    private async Task ReadEventsAsync()
+    /// <summary>
+    /// Supervisa la tarea del lector: se guarda en <see cref="_readerTask"/> y nunca termina en error (no queda sin observar).
+    /// El fallo de un evento lo absorbe el propio lector; aquí solo se registra cómo termina. Una cancelación por el cierre de la
+    /// ventana es el final esperado y no se registra como problema.
+    /// </summary>
+    private async Task SuperviseReaderAsync()
     {
         try
         {
-            await foreach (var e in _service.Events.ReadAllAsync(_closing.Token))
+            GestureReaderEnd end;
+            try
             {
-                _log.Append(e);
-                AppendLine($"#{e.Sequence} {e.Kind} ({e.Point.X}, {e.Point.Y}){(e.Cause != CancelCause.None ? " causa=" + e.Cause : string.Empty)}");
+                end = await _reader.RunAsync(_closing.Token);
+            }
+            catch (Exception exception)
+            {
+                // RunAsync no debería lanzar (contrato); si lo hiciera, no se pierde.
+                end = new GestureReaderEnd(GestureReaderEndReason.ChannelFaulted, exception);
+            }
+
+            _readerEnd = end;
+            if (end.Reason != GestureReaderEndReason.Cancelled)
+            {
+                AppendLine("[lector] " + ReaderStoppedMessage(end));
             }
         }
-        catch (OperationCanceledException)
+        catch
         {
-            // Cierre de la ventana.
+            // El estado ya está guardado en _readerEnd y lo muestra el diagnóstico; esta tarea no puede fallar.
+        }
+    }
+
+    /// <summary>Procesa un evento del canal. El radial lo recibe aunque el registro falle: perder un «confirmado» dejaría el overlay visible.</summary>
+    private void ProcessGesture(GestureEvent e)
+    {
+        try
+        {
+            _log.Append(e);
+            AppendLine($"#{e.Sequence} {e.Kind} ({e.Point.X}, {e.Point.Y}){(e.Cause != CancelCause.None ? " causa=" + e.Cause : string.Empty)}");
+        }
+        finally
+        {
+            ShowRadial(e);
+        }
+    }
+
+    private void OnReaderFailure(GestureEvent e, Exception exception)
+    {
+        // Primero el estado (no puede fallar) y después el registro (puede ser justo lo que falla; el lector lo tolera).
+        _readerLastFailure = $"{DateTime.Now:HH:mm:ss} evento #{e.Sequence} {e.Kind}: {exception.GetType().Name}: {exception.Message}";
+        AppendLine("[lector] ERROR al procesar un evento (se continúa con el siguiente): " + _readerLastFailure);
+    }
+
+    private string DescribeReader()
+    {
+        if (_readerEnd is { } end)
+        {
+            return end.Reason == GestureReaderEndReason.Cancelled ? "detenido (cierre de la ventana)" : "DETENIDO: " + ReaderStoppedMessage(end);
+        }
+
+        if (_readerTask is null)
+        {
+            return "sin iniciar";
+        }
+
+        return _reader.TotalFailures == 0
+            ? "en marcha"
+            : $"en marcha; {_reader.TotalFailures} fallo(s) recuperado(s), último: {_readerLastFailure}";
+    }
+
+    private static string ReaderStoppedMessage(GestureReaderEnd end) => end.Reason switch
+    {
+        GestureReaderEndReason.ChannelCompleted => "el canal de eventos se cerró; los gestos ya no se procesan.",
+        GestureReaderEndReason.ChannelFaulted => $"el canal de eventos terminó con un error ({end.Exception?.GetType().Name}); los gestos ya no se procesan.",
+        GestureReaderEndReason.TooManyFailures => $"{end.ConsecutiveFailures} eventos seguidos fallaron ({end.Exception?.GetType().Name}); el lector se detuvo y los gestos ya no se procesan.",
+        _ => "detenido.",
+    };
+
+    /// <summary>
+    /// Reenvía el gesto al coordinador del radial. Un fallo del overlay se registra y se contiene: este bucle es el único lector
+    /// del canal de eventos y no debe morir (el canal no tiene límite y dejaría de vaciarse).
+    /// </summary>
+    private void ShowRadial(GestureEvent e)
+    {
+        try
+        {
+            _coordinator.Handle(e);
+        }
+        catch (Exception exception)
+        {
+            AppendLine("[overlay] ERROR: " + exception.Message);
+            _coordinator.Dismiss();
+        }
+
+        // Mientras haya un radial en pantalla se lee el cursor con el reloj de la interfaz.
+        if (_coordinator.IsActive != _overlayPoll.IsEnabled)
+        {
+            _overlayPoll.IsEnabled = _coordinator.IsActive;
+        }
+    }
+
+    /// <summary>
+    /// Comunica el resultado de una acción. Hasta que existan la bandeja y las notificaciones (fases posteriores) el aviso va al
+    /// registro y a la fila «Última acción» de esta ventana; no se abre ningún cuadro de mensaje: robaría el foco a la aplicación
+    /// que recibe el atajo.
+    /// </summary>
+    private void OnActionFinished(RadialItem item, ActionExecutionResult result)
+    {
+        var text = result.Status switch
+        {
+            // «Aceptada por Windows», no «hecha»: un atajo hacia una aplicación elevada puede descartarse sin aviso (UIPI) y un
+            // lanzamiento solo confirma que el sistema lo aceptó. Radial no puede comprobar el efecto real.
+            ActionExecutionStatus.Succeeded => $"«{item.Name}»: aceptada por Windows (no se comprueba que la aplicación la procese)",
+            ActionExecutionStatus.Cancelled => $"«{item.Name}»: cancelada",
+            _ => $"«{item.Name}»: FALLÓ ({result.Error!.Code}) {result.Error.Message}",
+        };
+
+        AppendLine("[acción] " + text);
+        Set("Última acción", $"{DateTime.Now:HH:mm:ss}  {text}");
+    }
+
+    private void PollRadial()
+    {
+        try
+        {
+            _coordinator.Poll();
+
+            // Un sondeo puede terminar el radial (navegación no soportada): entonces ya no hay nada que sondear.
+            if (!_coordinator.IsActive)
+            {
+                _overlayPoll.Stop();
+            }
+        }
+        catch (Exception exception)
+        {
+            AppendLine("[overlay] ERROR: " + exception.Message);
+            _coordinator.Dismiss();
+            _overlayPoll.Stop();
         }
     }
 
@@ -263,6 +431,11 @@ public partial class MainWindow : Window
         using var cancel = new CancellationTokenSource();
         _selfTestCancel = cancel;
         _selfTestRunning = true;
+
+        // El radial no reacciona a la entrada sintética de la autoprueba: ni se muestra el overlay (taparía la zona de prueba y
+        // falsearía sus comprobaciones de ventana) ni se toca el motor.
+        _coordinator.Isolate();
+        _overlayPoll.Stop();
         try
         {
             Activate();
@@ -289,6 +462,9 @@ public partial class MainWindow : Window
             // RunAsync ya liberó de forma síncrona todo lo que pulsó antes de volver aquí.
             _selfTestCancel = null;
             _selfTestRunning = false;
+
+            // Los eventos que la autoprueba dejó sin leer en el canal se descartan por su marca de tiempo.
+            _coordinator.Resume();
             if (_closeRequestedDuringSelfTest)
             {
                 Close(); // continúa el cierre que se había aplazado
@@ -309,9 +485,28 @@ public partial class MainWindow : Window
         }
 
         _refresh.Stop();
-        _closing.Cancel();
+        _overlayPoll.Stop();
 
-        // Cancela cualquier gesto activo y quita los hooks antes de salir.
-        _service.Dispose();
+        // El lector se detiene primero (su final por cancelación es el esperado y no se registra) y el coordinador deja de tener
+        // una acción pendiente y oculta el overlay ANTES de quitar los hooks; así nada reacciona a lo que el cierre publique.
+        // Lo que sigue va en finally porque el overlay es una ventana más de la aplicación (sin mostrarla cuenta): si no se cierra,
+        // el proceso no termina, falle lo que falle al liberar el servicio.
+        _closing.Cancel();
+        try
+        {
+            _coordinator.Dismiss();
+        }
+        finally
+        {
+            try
+            {
+                // Cancela cualquier gesto activo y quita los hooks antes de salir.
+                _service.Dispose();
+            }
+            finally
+            {
+                _overlay.Close();
+            }
+        }
     }
 }

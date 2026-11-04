@@ -42,6 +42,36 @@ public class OpenFileActionExecutorTests : IClassFixture<TempFileSystem>
         Assert.Empty(launcher.Requests);
     }
 
+    [Fact]
+    public async Task ADevicePath_IsNotAllowed_EvenIfItNamesAnExistingFile()
+    {
+        var (result, launcher) = await Run(@"\\?\" + _fs.ExistingFile);
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Theory]
+    [InlineData(@"\??\")]
+    [InlineData(@"\/?\")]
+    [InlineData("//./")]
+    public async Task EveryFormOfDevicePrefix_IsNotAllowed(string prefix)
+    {
+        var (result, launcher) = await Run(prefix + _fs.ExistingFile);
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
+    [Fact]
+    public async Task AnAlternateDataStream_IsNotAllowed_EvenOnAnExistingFile()
+    {
+        var (result, launcher) = await Run(_fs.ExistingFile + ":flujo");
+
+        Assert.Equal(ActionErrorCodes.TargetNotAllowed, result.Error!.Code);
+        Assert.Empty(launcher.Requests);
+    }
+
     [Theory]
     [InlineData("<>|?*.txt")]
     [InlineData("::")]

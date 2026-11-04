@@ -1,7 +1,7 @@
 <Window x:Class="Radial.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Radial — diagnóstico de captura global (fase 3)" Height="760" Width="760"
+        Title="Radial — diagnóstico de captura global y radial (fase 4.1)" Height="760" Width="760"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -20,7 +20,7 @@
         </StackPanel>
 
         <TextBlock Grid.Row="1" Margin="0,8,0,8" TextWrapping="Wrap" Foreground="#555"
-                   Text="Gesto: mantén Ctrl, pulsa el botón central, mueve y suelta el botón central. Los eventos inyectados se ignoran; durante la autoprueba solo se aceptan los que lleva la marca de Radial." />
+                   Text="Gesto: mantén Ctrl, pulsa el botón central, mueve y suelta el botón central. Con la captura en marcha, el radial aparece sobre el cursor mientras dura el gesto y, al soltar el botón central, ejecuta la acción elegida (los atajos esperan a que sueltes Ctrl, Mayús, Alt y Win; hasta 5 s). Hazlo con otra aplicación en primer plano: el teclado va a la ventana activa. Los eventos inyectados se ignoran; durante la autoprueba solo se aceptan los que lleva la marca de Radial y el radial permanece aislado, sin ejecutar nada." />
 
         <Grid Grid.Row="2" x:Name="StateGrid" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>

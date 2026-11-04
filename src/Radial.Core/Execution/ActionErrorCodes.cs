@@ -21,4 +21,35 @@ public static class ActionErrorCodes
 
     /// <summary>La dirección no usa un esquema que se pueda lanzar. En la fase 4 solo se lanzan <c>http</c> y <c>https</c>.</summary>
     public const string UrlNotAllowed = "UrlNotAllowed";
+
+    /// <summary>
+    /// Un atajo de teclado venció: tras esperar el tiempo configurado seguía pulsado algún modificador físico (Ctrl, Mayús, Alt o
+    /// Win). No se envió ninguna tecla.
+    /// </summary>
+    public const string ModifiersNotReleased = "ModifiersNotReleased";
+
+    /// <summary>
+    /// La ventana en primer plano cambió mientras el atajo esperaba, o no hay ninguna ventana en primer plano: no se envió, para que
+    /// el atajo no llegue a otra aplicación ni a ninguna.
+    /// </summary>
+    public const string ForegroundChanged = "ForegroundChanged";
+
+    /// <summary>El sistema no aceptó la entrada de teclado que se intentó enviar (se liberó cualquier tecla que hubiera quedado pulsada).</summary>
+    public const string InputInjectionFailed = "InputInjectionFailed";
+
+    /// <summary>
+    /// El sistema no aceptó la entrada de teclado Y tampoco se pudo confirmar la liberación de lo que hubiera quedado pulsado
+    /// (incluso tras reintentarla): es posible que alguna tecla, normalmente un modificador, siga pulsada para Windows. Pulsar y
+    /// soltar esa tecla en el teclado físico lo corrige.
+    /// </summary>
+    public const string KeyReleaseFailed = "KeyReleaseFailed";
+
+    /// <summary>
+    /// El destino de una aplicación, archivo o carpeta no se lanza por política (ruta de dispositivo, protocolo del sistema o ruta
+    /// que no es ni absoluta ni un nombre de programa). Distinto de <see cref="TargetNotFound"/>: no se llegó a mirar si existe.
+    /// </summary>
+    public const string TargetNotAllowed = "TargetNotAllowed";
+
+    /// <summary>Un ejecutor lanzó una excepción en lugar de devolver un resultado: es un defecto, pero no debe quedar en silencio.</summary>
+    public const string UnexpectedError = "UnexpectedError";
 }

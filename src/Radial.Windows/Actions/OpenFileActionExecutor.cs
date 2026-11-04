@@ -22,7 +22,16 @@ public sealed class OpenFileActionExecutor : ProcessActionExecutor<OpenFileActio
         [NotNullWhen(true)] out ProcessLaunchRequest? request,
         [NotNullWhen(false)] out ActionExecutionResult? failure)
     {
-        if (!File.Exists(action.Path))
+        var verdict = TargetPolicy.Classify(action.Path);
+        if (verdict == PathVerdict.Forbidden)
+        {
+            request = null;
+            failure = ActionExecutionResult.Failure(ActionErrorCodes.TargetNotAllowed, "La ruta del archivo no está permitida (ruta de dispositivo o flujo de datos alternativo).");
+            return false;
+        }
+
+        // Una ruta relativa dependería del directorio de trabajo del proceso: no se resuelve (documento técnico), se trata como inexistente.
+        if (verdict == PathVerdict.Relative || !File.Exists(action.Path))
         {
             request = null;
             failure = ActionExecutionResult.Failure(ActionErrorCodes.TargetNotFound, "El archivo no existe.");
