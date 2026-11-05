@@ -4,7 +4,7 @@ using WinForms = System.Windows.Forms;
 namespace Radial.App.Tray;
 
 /// <summary>
-/// El icono de Radial en la bandeja del sistema, con dos opciones: mostrar la ventana de diagnóstico y salir. Es solo interfaz (la
+/// El icono de Radial en la bandeja del sistema, con dos opciones: mostrar el centro de control y salir. Es solo interfaz (la
 /// decisión de qué hacer con cada opción es de quien lo crea). Usa <c>NotifyIcon</c> de Windows Forms, que forma parte del entorno
 /// de ejecución de escritorio de .NET (sin paquetes adicionales) y funciona con el bucle de mensajes de WPF. El icono se dibuja en
 /// tiempo de ejecución (un anillo con un punto central con el acento del radial): no hay archivo de icono todavía (fase 7).
@@ -24,7 +24,7 @@ internal sealed class TrayIcon : IDisposable
 
         _image = CreateImage();
         _menu = new WinForms.ContextMenuStrip();
-        _menu.Items.Add("Mostrar ventana de diagnóstico", null, (_, _) => showWindow());
+        _menu.Items.Add("Mostrar Radial", null, (_, _) => showWindow());
         _menu.Items.Add(new WinForms.ToolStripSeparator());
         _menu.Items.Add("Salir de Radial", null, (_, _) => exit());
 

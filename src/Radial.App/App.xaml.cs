@@ -83,6 +83,12 @@ public partial class App : Application
         {
             Factory = () => FactoryLibrary.Create(),
         };
+        // Un fallo inesperado dentro de un comando asíncrono de la interfaz se registra y se avisa; nunca se pierde en silencio.
+        AsyncCommand.Failed += exception =>
+        {
+            host.Log("[interfaz] ERROR: " + exception);
+            dialogs.Show("Ha ocurrido un error inesperado: " + exception.Message, isError: true);
+        };
         var shell = new ShellViewModel(session, services, dialogs, new DiagnosticsPage(host, selfTest));
         if (selfTest is not null)
         {
