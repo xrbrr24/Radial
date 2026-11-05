@@ -94,6 +94,31 @@ jobs:
           $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           $lines | ForEach-Object { Write-Host $_ }
 
+      # Cada prueba fallada se emite como anotación de error (nombre y primer renglón del mensaje), para poder leerla sin
+      # descargar el artefacto TRX. GitHub limita las anotaciones por paso; las que sobren siguen en el TRX.
+      - name: Anotar las pruebas falladas
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          foreach ($dir in 'core', 'windows') {
+            $folder = Join-Path $env:RUNNER_TEMP "test-results/$dir"
+            foreach ($trx in Get-ChildItem -Path $folder -Filter '*.trx' -ErrorAction SilentlyContinue) {
+              $xml = [xml](Get-Content -LiteralPath $trx.FullName -Raw)
+              $failed = @($xml.TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq 'Failed' })
+              $shown = 0
+              foreach ($result in $failed) {
+                if ($shown -ge 10) { break }
+                $message = [string]$result.Output.ErrorInfo.Message
+                $first = ($message -split "`n" | Select-Object -First 3) -join ' | '
+                $text = ("$dir :: $($result.testName) :: $first" -replace '[\r\n%]', ' ')
+                if ($text.Length -gt 600) { $text = $text.Substring(0, 600) }
+                Write-Host "::error title=Prueba fallada::$text"
+                $shown++
+              }
+              if ($failed.Count -gt $shown) { Write-Host "::warning title=Pruebas falladas::$dir : $($failed.Count - $shown) fallos mas en el TRX" }
+            }
+          }
+
       - name: Subir resultados de Core (TRX)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
