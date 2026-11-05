@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Radial.Core.Validation;
 
 namespace Radial.Core.Storage;
 
@@ -7,8 +8,11 @@ public interface IConfigurationMigration
 {
     int FromVersion { get; }
 
-    /// <summary>Transforma <paramref name="root"/> en su sitio a la forma de la versión siguiente. El migrador actualiza <c>schemaVersion</c>.</summary>
-    void Migrate(JsonObject root);
+    /// <summary>
+    /// Transforma <paramref name="root"/> en su sitio a la forma de la versión siguiente. El migrador actualiza <c>schemaVersion</c>.
+    /// Las incoherencias que se resuelven por el camino (sin perder datos) se comunican añadiendo avisos a <paramref name="notes"/>.
+    /// </summary>
+    void Migrate(JsonObject root, ICollection<ValidationIssue> notes);
 }
 
 /// <summary>
@@ -44,16 +48,17 @@ public sealed class ConfigurationMigrator
         }
     }
 
-    /// <summary>Las migraciones de producción: la versión actual del esquema y, por ahora, ninguna migración (la primera versión es la 1).</summary>
-    public static ConfigurationMigrator Default { get; } = new(ConfigurationFile.CurrentSchemaVersion, []);
+    /// <summary>Las migraciones de producción: la versión actual del esquema y la migración de la 1 a la 2 (la biblioteca de acciones).</summary>
+    public static ConfigurationMigrator Default { get; } = new(ConfigurationFile.CurrentSchemaVersion, [new SchemaV1ToV2Migration()]);
 
     public int TargetVersion { get; }
 
     /// <summary>Migra <paramref name="root"/> en su sitio desde <paramref name="fromVersion"/> hasta <see cref="TargetVersion"/>.</summary>
     /// <exception cref="InvalidOperationException">Falta la migración de algún paso intermedio.</exception>
-    public void Migrate(JsonObject root, int fromVersion)
+    public void Migrate(JsonObject root, int fromVersion, ICollection<ValidationIssue>? notes = null)
     {
         ArgumentNullException.ThrowIfNull(root);
+        notes ??= new List<ValidationIssue>();
 
         for (var version = fromVersion; version < TargetVersion; version++)
         {
@@ -62,7 +67,7 @@ public sealed class ConfigurationMigrator
                 throw new InvalidOperationException($"No hay migración desde la versión {version} de la configuración.");
             }
 
-            migration.Migrate(root);
+            migration.Migrate(root, notes);
             root["schemaVersion"] = version + 1;
         }
     }

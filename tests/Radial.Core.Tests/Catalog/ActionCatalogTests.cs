@@ -101,14 +101,20 @@ public class ActionCatalogTests
     }
 
     [Fact]
-    public void ADescriptionIsRequired() => Assert.NotEmpty(Definition(description: " ").GetProblems());
+    public void ADescriptionIsOptional_ButBounded()
+    {
+        Assert.Empty(Definition(description: "").GetProblems());
+        Assert.NotEmpty(Definition(description: new string('x', ConfigurationLimits.MaxDescriptionLength + 1)).GetProblems());
+    }
 
     [Fact]
     public void AnInvalidIconOrCategory_IsRejected()
     {
         Assert.NotEmpty(Definition(icon: new IconReference(IconSource.Glyph, "")).GetProblems());
         Assert.NotEmpty(Definition(icon: new IconReference((IconSource)99, "Copy")).GetProblems());
-        Assert.NotEmpty((Definition() with { Category = (ActionCategory)99 }).GetProblems());
+        Assert.NotEmpty((Definition() with { Category = default }).GetProblems());
+        Assert.NotEmpty((Definition() with { Category = new ActionCategory("Mayúsculas y espacios") }).GetProblems());
+        Assert.Empty((Definition() with { Category = new ActionCategory("mi-categoria-2") }).GetProblems()); // las categorías son ampliables
     }
 
     // Catálogo
@@ -145,10 +151,10 @@ public class ActionCatalogTests
     [Fact]
     public void TheCatalog_FiltersByCategory()
     {
-        var web = Definition(id: "web.url", name: "Web", action: new OpenUrlAction("https://example.com")) with { Category = ActionCategory.Web };
+        var web = Definition(id: "web.url", name: "Web", action: new OpenUrlAction("https://example.com")) with { Category = ActionCategory.Browser };
         var catalog = new ActionCatalog([.. BuiltInShortcuts.All, web]);
 
-        Assert.Equal([web], catalog.InCategory(ActionCategory.Web));
+        Assert.Equal([web], catalog.InCategory(ActionCategory.Browser));
         Assert.Equal(5, catalog.InCategory(ActionCategory.Editing).Count());
         Assert.Empty(catalog.InCategory(ActionCategory.Files));
     }
@@ -158,7 +164,7 @@ public class ActionCatalogTests
     {
         var root = new MenuId("main");
         var items = BuiltInShortcuts.All.Select((d, i) => d.ToItem(root, (RadialDirection)i)).ToList();
-        var configuration = new RadialConfiguration { RootMenuId = root, Menus = [new RadialMenu(root, "Principal", items)] };
+        var configuration = new RadialConfiguration { RootMenuId = root, Actions = BuiltInShortcuts.All, Menus = [new RadialMenu(root, "Principal", items)] };
 
         Assert.True(ConfigurationValidator.Validate(configuration).IsValid);
     }

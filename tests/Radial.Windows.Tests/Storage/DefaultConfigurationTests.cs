@@ -1,7 +1,9 @@
+using Radial.Core.Catalog;
 using Radial.Core.Geometry;
 using Radial.Core.Model;
 using Radial.Core.Storage;
 using Radial.Core.Validation;
+using Radial.Windows.Shortcuts;
 using Radial.Windows.Storage;
 
 namespace Radial.Windows.Tests.Storage;
@@ -63,12 +65,50 @@ public class DefaultConfigurationTests
     }
 
     [Fact]
-    public void TheDefinitionsInTheConfiguration_AreTheOnesOfTheCatalog()
+    public void ThePlacedActions_ComeFromTheLibraryOfTheConfiguration()
     {
-        var catalog = DefaultConfiguration.CreateCatalog(@"C:\Apps\Edge\msedge.exe", @"C:\Docs", "https://www.wikipedia.org");
-        var used = AllItems(StorageSamples.Defaults()).Where(i => !i.IsGroup).Select(i => i.DefinitionId!).OrderBy(id => id);
+        var configuration = StorageSamples.Defaults();
+        var used = AllItems(configuration).Where(i => !i.IsGroup).Select(i => i.DefinitionId!).ToHashSet();
 
-        Assert.Equal(catalog.Definitions.Select(d => d.Id).OrderBy(id => id), used);
+        Assert.All(used, id => Assert.True(configuration.TryGetDefinition(id, out _), $"La acción '{id}' colocada no está en la biblioteca."));
+        Assert.Equal(8, used.Count);
+    }
+
+    [Fact]
+    public void TheLibrary_HoldsMoreActionsThanTheOnesPlaced_SoTheyCanBeUsedLater()
+    {
+        var configuration = StorageSamples.Defaults();
+        var placed = AllItems(configuration).Where(i => !i.IsGroup).Select(i => i.DefinitionId!).ToHashSet();
+        var unplaced = configuration.Actions.Where(a => !placed.Contains(a.Id)).ToList();
+
+        Assert.True(configuration.Actions.Count > 40);
+        Assert.NotEmpty(unplaced);
+        Assert.Contains(unplaced, a => a.Id == "media.play-pause");
+        Assert.Contains(unplaced, a => a.Id == "app.notepad");
+    }
+
+    [Fact]
+    public void TheLibrary_CoversEverySeedCategory_AndAllItsActionsAreFactoryActions()
+    {
+        var library = StorageSamples.Defaults().Actions;
+
+        foreach (var category in new[] { ActionCategory.Editing, ActionCategory.Browser, ActionCategory.Applications, ActionCategory.Files, ActionCategory.System, ActionCategory.Multimedia })
+        {
+            Assert.Contains(library, a => a.Category == category);
+        }
+
+        Assert.DoesNotContain(library, a => a.Category == ActionCategory.Custom); // lo personalizado lo crea el usuario
+        Assert.All(library, a => Assert.True(a.IsBuiltIn));
+        Assert.Equal(library.Count, library.Select(a => a.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public void EveryFactoryAction_IsValid_AndEveryFactoryShortcutIsSendable()
+    {
+        var library = FactoryLibrary.Create(FactoryPaths.FromEnvironment());
+
+        Assert.All(library, a => Assert.Empty(a.GetProblems()));
+        Assert.All(library.Where(a => a.Action is SendKeysAction), a => Assert.True(ShortcutParser.TryParse(((SendKeysAction)a.Action).Chord, out _), a.Id));
     }
 
     [Fact]

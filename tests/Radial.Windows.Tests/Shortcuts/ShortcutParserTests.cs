@@ -150,11 +150,13 @@ public class ShortcutParserTests
     }
 
     [Fact]
-    public void OnlyTheArrowsAreExtended()
+    public void TheExtendedKeys_AreExactlyTheNavigationBlock_TheNumpadSlashAndEnter_PrintScreenAndTheMenuKey()
     {
-        var extended = ShortcutParser.SupportedKeys.Where(k => k.Extended).Select(k => k.Name).Order().ToList();
+        var extended = ShortcutParser.SupportedKeys.Where(k => k.Extended).Select(k => k.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.Equal(["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp"], extended);
+        Assert.Equal(
+            new[] { "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "ContextMenu", "Delete", "End", "Home", "Insert", "NumpadDivide", "NumpadEnter", "PageDown", "PageUp", "PrintScreen" },
+            extended);
     }
 
     // Mayúsculas y minúsculas, nombre canónico
@@ -214,16 +216,10 @@ public class ShortcutParserTests
     [Fact]
     public void TheVocabulary_IsExactlyTheApprovedOne()
     {
-        var expected = Enumerable.Range('A', 26).Select(c => ((char)c).ToString())
-            .Concat(Enumerable.Range('0', 10).Select(c => ((char)c).ToString()))
-            .Concat(Enumerable.Range(1, 24).Select(n => $"F{n}"))
-            .Concat(["Enter", "Tab", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"])
-            .ToList();
-
         var actual = ShortcutParser.SupportedKeys.Select(k => k.Name).ToList();
 
-        Assert.Equal(66, actual.Count);
-        Assert.Equal(expected.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
+        Assert.Equal(118, actual.Count);
+        Assert.Equal(KeyVocabulary.Names.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -269,20 +265,10 @@ public class ShortcutParserTests
     }
 
     [Theory]
-    [InlineData("Escape")]
     [InlineData("Esc")]
-    [InlineData("Space")]
-    [InlineData("Backspace")]
-    [InlineData("Delete")]
     [InlineData("Del")]
-    [InlineData("Insert")]
-    [InlineData("Home")]
-    [InlineData("End")]
-    [InlineData("PageUp")]
-    [InlineData("PageDown")]
-    [InlineData("Numpad0")]
-    [InlineData("NumPad5")]
-    [InlineData("NumpadEnter")]
+    [InlineData("CapsLock")]
+    [InlineData("NumLock")]
     [InlineData("NumericEnter")]
     [InlineData("Return")]
     [InlineData("Left")]
@@ -334,7 +320,7 @@ public class ShortcutParserTests
     [Fact]
     public void ARejectedKey_LeavesTheDefaultValue()
     {
-        ShortcutParser.TryParseKey("Escape", out var key);
+        ShortcutParser.TryParseKey("Esc", out var key);
 
         Assert.Equal(default, key);
     }
@@ -380,7 +366,7 @@ public class ShortcutParserTests
 
     [Theory]
     [InlineData("Ñ")]
-    [InlineData("Escape")]
+    [InlineData("Esc")]
     [InlineData("")]
     [InlineData(null)]
     public void AChordWithAnInvalidKey_IsRejected_WhateverItsModifiers(string? key)

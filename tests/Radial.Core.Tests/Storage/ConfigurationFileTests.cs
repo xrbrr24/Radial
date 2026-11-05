@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Radial.Core.Catalog;
 using Radial.Core.Geometry;
 using Radial.Core.Model;
 using Radial.Core.Storage;
@@ -18,11 +19,27 @@ public class ConfigurationFileTests
 
     private static readonly UnknownAction Unknown = new("futureAction", UnknownRaw);
 
-    /// <summary>Una configuración con un submenú y los siete tipos de acción (seis conocidos y una desconocida).</summary>
-    private static RadialConfiguration Sample()
+    private static ActionDefinition Def(string id, string name, ActionCategory category, RadialAction action, IconReference? icon = null, IReadOnlyList<string>? tags = null, bool builtIn = false, string description = "") =>
+        new(id, name, category, description, icon ?? new IconReference(IconSource.Glyph, "Apps"), action, tags, builtIn);
+
+    /// <summary>
+    /// Una configuración con biblioteca (los seis tipos de acción, una acción sin colocar y una de tipo desconocido), un submenú,
+    /// colocaciones enlazadas con y sin ajustes propios, una acción desconocida suelta y un grupo.
+    /// </summary>
+    private static RadialConfiguration Sample() => LibraryResolver.Resolve(BuildSample());
+
+    private static RadialConfiguration BuildSample()
     {
         var main = new MenuId("main");
         var more = new MenuId("more");
+        var app = Def("app.tool", "Herramienta", ActionCategory.Applications, new LaunchApplicationAction(@"C:\Apps\a.exe", "--x \"y\"", @"C:\Apps"), description: "Abre la herramienta.", tags: ["útil", "trabajo"]);
+        var file = Def("file.doc", "Documento", ActionCategory.Files, new OpenFileAction(@"C:\Docs\a.txt"), new IconReference(IconSource.File, @"C:\Docs\a.txt"));
+        var folder = Def("folder.docs", "Carpeta", ActionCategory.Files, new OpenFolderAction(@"C:\Docs"));
+        var url = Def("url.example", "Web", ActionCategory.Browser, new OpenUrlAction("https://example.com/a?b=c"));
+        var copy = Def("edit.copy-all", "Copiar", ActionCategory.Editing, new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, "C")), new IconReference(IconSource.Glyph, "Copy"), builtIn: true);
+        var unplaced = Def("custom.sin-colocar", "Sin colocar", ActionCategory.Custom, new SendKeysAction(new KeyChord(KeyModifiers.Alt, "Oem3")));
+        var futureInLibrary = Def("future.lib", "Futura", ActionCategory.Custom, new UnknownAction("futureLibraryAction", "{\"type\":\"futureLibraryAction\",\"x\":[1,{\"y\":null}]}"));
+
         return new RadialConfiguration
         {
             RootMenuId = main,
@@ -33,26 +50,27 @@ public class ConfigurationFileTests
                 BackDwell = TimeSpan.FromMilliseconds(900),
                 MaxDepth = 4,
             },
+            Actions = [app, file, folder, url, copy, unplaced, futureInLibrary],
             Menus =
             [
                 new RadialMenu(
                     main,
                     "Principal",
                     [
-                        new RadialItem(new ItemId("main.app"), "App", RadialDirection.North, new LaunchApplicationAction(@"C:\Apps\a.exe", "--x \"y\"", @"C:\Apps")),
-                        new RadialItem(new ItemId("main.file"), "Archivo", RadialDirection.NorthEast, new OpenFileAction(@"C:\Docs\a.txt"), new IconReference(IconSource.File, @"C:\Docs\a.txt")),
-                        new RadialItem(new ItemId("main.folder"), "Carpeta", RadialDirection.East, new OpenFolderAction(@"C:\Docs")),
-                        new RadialItem(new ItemId("main.url"), "Web", RadialDirection.SouthEast, new OpenUrlAction("https://example.com/a?b=c")),
-                        new RadialItem(
-                            new ItemId("main.copy"),
-                            "Copiar",
-                            RadialDirection.South,
-                            new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, "C")),
-                            new IconReference(IconSource.Glyph, "Copy"),
-                            "edit.copy"),
+                        app.ToItem(new ItemId("main.app"), RadialDirection.North),
+                        file.ToItem(new ItemId("main.file"), RadialDirection.NorthEast) with { LabelOverride = "Mi documento", IconOverride = new IconReference(IconSource.Glyph, "Document") },
+                        folder.ToItem(new ItemId("main.folder"), RadialDirection.East),
+                        url.ToItem(new ItemId("main.url"), RadialDirection.SouthEast),
+                        copy.ToItem(new ItemId("main.copy"), RadialDirection.South),
                         new RadialItem(new ItemId("main.more"), "Más", RadialDirection.West, new OpenMenuAction(more), new IconReference(IconSource.Glyph, "Apps")),
                     ]),
-                new RadialMenu(more, "Más", [new RadialItem(new ItemId("more.future"), "Futura", RadialDirection.North, Unknown)]),
+                new RadialMenu(
+                    more,
+                    "Más",
+                    [
+                        new RadialItem(new ItemId("more.future"), "Futura", RadialDirection.North, Unknown),
+                        url.ToItem(new ItemId("more.url"), RadialDirection.South), // la misma definición, colocada en otro menú
+                    ]),
             ],
         };
     }
@@ -88,6 +106,7 @@ public class ConfigurationFileTests
         Assert.Equal(original.Geometry, parsed.Geometry);
         Assert.Equal(original.Navigation, parsed.Navigation);
         Assert.Equal(original.Menus.Count, parsed.Menus.Count);
+        AssertSameLibrary(original, parsed);
 
         for (var m = 0; m < original.Menus.Count; m++)
         {
@@ -104,6 +123,8 @@ public class ConfigurationFileTests
                 Assert.Equal(expected.Position, actual.Position);
                 Assert.Equal(expected.Icon, actual.Icon);
                 Assert.Equal(expected.DefinitionId, actual.DefinitionId);
+                Assert.Equal(expected.LabelOverride, actual.LabelOverride);
+                Assert.Equal(expected.IconOverride, actual.IconOverride);
 
                 if (expected.Action is UnknownAction unknown)
                 {
@@ -115,6 +136,27 @@ public class ConfigurationFileTests
                 {
                     Assert.Equal(expected.Action, actual.Action);
                 }
+            }
+        }
+    }
+
+    private static void AssertSameLibrary(RadialConfiguration expected, RadialConfiguration actual)
+    {
+        Assert.Equal(expected.Actions.Select(a => a.Id), actual.Actions.Select(a => a.Id)); // también la que no está colocada en ningún menú
+        for (var i = 0; i < expected.Actions.Count; i++)
+        {
+            var before = expected.Actions[i];
+            var after = actual.Actions[i];
+            if (before.Action is UnknownAction unknownBefore)
+            {
+                var unknownAfter = Assert.IsType<UnknownAction>(after.Action);
+                Assert.Equal(unknownBefore.Type, unknownAfter.Type);
+                Assert.True(SameJson(unknownBefore.RawJson, unknownAfter.RawJson));
+                Assert.Equal(before with { Action = after.Action }, after);
+            }
+            else
+            {
+                Assert.Equal(before, after); // nombre, descripción, categoría, etiquetas, icono, acción y procedencia
             }
         }
     }
@@ -134,9 +176,13 @@ public class ConfigurationFileTests
     {
         var json = ConfigurationFile.Serialize(Sample());
 
-        Assert.Contains("\"schemaVersion\": 1", json);
+        Assert.Contains("\"schemaVersion\": 2", json);
         Assert.Contains("\"rootMenuId\": \"main\"", json);
-        Assert.Contains("\"definitionId\": \"edit.copy\"", json);
+        Assert.Contains("\"actionId\": \"edit.copy-all\"", json); // la colocación solo referencia la definición
+        Assert.Contains("\"actions\": [", json);
+        Assert.Contains("\"category\": \"editing\"", json);
+        Assert.Contains("\"builtIn\": true", json);
+        Assert.Contains("\"label\": \"Mi documento\"", json);
         Assert.Contains("\"type\": \"sendKeys\"", json);
         Assert.Contains("\"submenuDwellMs\": 450", json);
         Assert.DoesNotContain("null", json.Replace("\"deep\": null", string.Empty)); // sin nulos: lo que falta no se escribe
@@ -149,7 +195,8 @@ public class ConfigurationFileTests
         var modelTypes = typeof(RadialAction).Assembly.GetTypes()
             .Where(t => t.IsSubclassOf(typeof(RadialAction)) && !t.IsAbstract)
             .ToHashSet();
-        var sampled = Sample().Menus.SelectMany(m => m.Items).Select(i => i.Action.GetType()).ToHashSet();
+        var sample = Sample();
+        var sampled = sample.Menus.SelectMany(m => m.Items).Select(i => i.Action.GetType()).Concat(sample.Actions.Select(a => a.Action.GetType())).ToHashSet();
 
         // Si falla: se añadió un tipo de acción a Core. Hay que darle serialización en ActionJson y añadirlo a Sample().
         Assert.True(modelTypes.SetEquals(sampled), "Tipos sin cubrir: " + string.Join(", ", modelTypes.Except(sampled).Select(t => t.Name)));
@@ -224,7 +271,7 @@ public class ConfigurationFileTests
         var result = Parse(Doc("{\"type\":\"openUrl\"}"));
 
         Assert.Equal(ConfigurationParseStatus.Invalid, result.Status);
-        Assert.Contains(result.Issues, i => i.Code == ValidationCodes.ActionInvalid);
+        Assert.Contains(result.Issues, i => i.Code == ValidationCodes.LibraryDefinitionInvalid);
     }
 
     [Fact]
@@ -281,7 +328,7 @@ public class ConfigurationFileTests
     {
         public int FromVersion => 1;
 
-        public void Migrate(JsonObject root)
+        public void Migrate(JsonObject root, ICollection<ValidationIssue> notes)
         {
             root["rootMenuId"] = root["root"]!.DeepClone();
             root.Remove("root");
@@ -292,7 +339,7 @@ public class ConfigurationFileTests
     {
         public int FromVersion => 2;
 
-        public void Migrate(JsonObject root) => root["geometry"] = new JsonObject { ["deadZoneRadius"] = 55 };
+        public void Migrate(JsonObject root, ICollection<ValidationIssue> notes) => root["geometry"] = new JsonObject { ["deadZoneRadius"] = 55 };
     }
 
     private const string VersionOneDocument =
@@ -338,7 +385,7 @@ public class ConfigurationFileTests
     {
         public int FromVersion => 1;
 
-        public void Migrate(JsonObject root) => throw new InvalidOperationException("paso roto");
+        public void Migrate(JsonObject root, ICollection<ValidationIssue> notes) => throw new InvalidOperationException("paso roto");
     }
 
     [Fact]

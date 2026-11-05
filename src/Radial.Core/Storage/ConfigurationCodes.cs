@@ -15,4 +15,13 @@ public static class ConfigurationCodes
     public const string ActionTypeMissing = "config.action-type-missing";
     public const string ActionTypeInvalid = "config.action-type-invalid";
     public const string ActionPropertyInvalid = "config.action-property-invalid";
+
+    /// <summary>Aviso de la migración: una incoherencia del archivo antiguo que se resolvió (no se perdió nada).</summary>
+    public const string MigrationNote = "config.migration-note";
+
+    /// <summary>Un elemento tiene a la vez <c>actionId</c> y <c>action</c>: serían dos fuentes de verdad.</summary>
+    public const string ItemActionConflict = "config.item-action-conflict";
+
+    /// <summary>Un elemento referencia (<c>actionId</c>) una acción que no está en la biblioteca.</summary>
+    public const string ActionRefMissing = "config.action-ref-missing";
 }

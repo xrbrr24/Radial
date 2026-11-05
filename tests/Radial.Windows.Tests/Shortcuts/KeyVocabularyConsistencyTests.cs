@@ -45,7 +45,7 @@ public class KeyVocabularyConsistencyTests
     {
         var parserNames = ShortcutParser.SupportedKeys.Select(k => k.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.Equal(66, parserNames.Count);
+        Assert.Equal(118, parserNames.Count);
         Assert.Equal(KeyVocabulary.Names.Order(StringComparer.Ordinal), parserNames);
     }
 
@@ -97,10 +97,10 @@ public class KeyVocabularyConsistencyTests
     }
 
     [Theory]
-    [InlineData("Space")]
-    [InlineData("Delete")]
-    [InlineData("Escape")]
     [InlineData("Ñ")]
+    [InlineData("Semicolon")]
+    [InlineData("CapsLock")]
+    [InlineData("Del")]
     public void TheKeysThatUsedToValidateButCouldNotRun_AreNowRejectedByBoth(string name)
     {
         var chord = new KeyChord(KeyModifiers.None, name);

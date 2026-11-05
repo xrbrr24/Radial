@@ -16,7 +16,29 @@ internal sealed class ConfigFileDto
 
     public NavigationDto? Navigation { get; set; }
 
+    public List<ActionDefDto>? Actions { get; set; }
+
     public List<MenuDto>? Menus { get; set; }
+}
+
+// Una definición de la biblioteca de acciones (versión 2 del esquema).
+internal sealed class ActionDefDto
+{
+    public string? Id { get; set; }
+
+    public string? Name { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? Category { get; set; }
+
+    public List<string>? Tags { get; set; }
+
+    public bool? BuiltIn { get; set; }
+
+    public IconDto? Icon { get; set; }
+
+    public JsonObject? Action { get; set; }
 }
 
 internal sealed class GeometryDto
@@ -55,6 +77,11 @@ internal sealed class ItemDto
     public IconDto? Icon { get; set; }
 
     public string? DefinitionId { get; set; }
+
+    // Colocación enlazada a la biblioteca (versión 2): la acción vive en la definición; Label e Icon son ajustes propios de la colocación.
+    public string? ActionId { get; set; }
+
+    public string? Label { get; set; }
 
     public JsonObject? Action { get; set; }
 }

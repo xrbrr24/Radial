@@ -14,6 +14,7 @@ public static class ConfigurationValidator
         ValidateGeometry(configuration.Geometry, issues);
         ValidateNavigation(configuration.Navigation, issues);
         ValidateRoot(configuration, issues);
+        ValidateLibrary(configuration, issues);
         ValidateMenus(configuration, issues);
         ValidateMenuGraph(configuration, issues);
         return new ValidationResult(issues);
@@ -95,11 +96,12 @@ public static class ConfigurationValidator
             }
 
             ValidateName(menu.Name, $"{menuPath}.name", issues);
-            ValidateItems(knownMenus, menu, menuPath, itemIds, issues);
+            ValidateItems(configuration, knownMenus, menu, menuPath, itemIds, issues);
         }
     }
 
     private static void ValidateItems(
+        RadialConfiguration configuration,
         HashSet<MenuId> knownMenus,
         RadialMenu menu,
         string menuPath,
@@ -131,8 +133,79 @@ public static class ConfigurationValidator
             }
 
             ValidateDefinitionId(item.DefinitionId, $"{path}.definitionId", issues);
+            ValidateLink(configuration, item, $"{path}.definitionId", issues);
             ValidateIcon(item.Icon, $"{path}.icon", issues);
             ValidateAction(knownMenus, item.Action, $"{path}.action", issues);
+        }
+    }
+
+    /// <summary>Biblioteca de acciones: identificadores únicos, definiciones correctas y tamaño razonable.</summary>
+    private static void ValidateLibrary(RadialConfiguration configuration, List<ValidationIssue> issues)
+    {
+        if (configuration.Actions.Count > ConfigurationLimits.MaxLibraryActions)
+        {
+            Error(issues, ValidationCodes.LibraryTooLarge, "actions",
+                $"La biblioteca tiene {configuration.Actions.Count} acciones y el máximo es {ConfigurationLimits.MaxLibraryActions}.");
+            return;
+        }
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < configuration.Actions.Count; index++)
+        {
+            var definition = configuration.Actions[index];
+            var path = $"actions[{Label(definition?.Id, index)}]";
+            if (definition is null)
+            {
+                Error(issues, ValidationCodes.LibraryDefinitionInvalid, path, "Hay una definición vacía (null).");
+                continue;
+            }
+
+            foreach (var problem in definition.GetProblems(allowUnknownAction: true))
+            {
+                Error(issues, ValidationCodes.LibraryDefinitionInvalid, path, problem);
+            }
+
+            if (!string.IsNullOrWhiteSpace(definition.Id) && !ids.Add(definition.Id))
+            {
+                Error(issues, ValidationCodes.LibraryDuplicateId, $"{path}.id", $"Ya existe una acción con el identificador '{definition.Id}'.");
+            }
+
+            if (definition.Action is UnknownAction)
+            {
+                issues.Add(new ValidationIssue(ValidationSeverity.Warning, ValidationCodes.ActionUnknownType,
+                    "Esta acción es de un tipo que esta versión de Radial no conoce: se conserva en la biblioteca, pero no se puede ejecutar.", path));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Una colocación enlazada debe coincidir con su definición (una sola fuente de verdad): la definición existe, el elemento no
+    /// es un grupo y su nombre, acción e icono son los de la definición (o los propios que declare).
+    /// </summary>
+    private static void ValidateLink(RadialConfiguration configuration, RadialItem item, string path, List<ValidationIssue> issues)
+    {
+        if (item.DefinitionId is null || string.IsNullOrWhiteSpace(item.DefinitionId) || item.DefinitionId.Length > ConfigurationLimits.MaxIdLength)
+        {
+            return; // ya señalado por ValidateDefinitionId
+        }
+
+        if (item.IsGroup)
+        {
+            Error(issues, ValidationCodes.ItemGroupWithDefinition, path, "Un grupo es estructura del menú y no puede estar enlazado a una acción de la biblioteca.");
+            return;
+        }
+
+        if (!configuration.TryGetDefinition(item.DefinitionId, out var definition))
+        {
+            Error(issues, ValidationCodes.ItemDefinitionMissing, path, $"La acción '{item.DefinitionId}' no existe en la biblioteca.");
+            return;
+        }
+
+        var expected = Radial.Core.Catalog.LibraryResolver.Materialize(item, definition);
+        if (!expected.Action.Equals(item.Action) || expected.Name != item.Name || !Equals(expected.Icon, item.Icon))
+        {
+            Error(issues, ValidationCodes.ItemDefinitionConflict, path,
+                $"El elemento no coincide con la acción '{item.DefinitionId}' de la biblioteca: la biblioteca es la única fuente de verdad.");
         }
     }
 

@@ -47,9 +47,8 @@ public class SendKeysActionValidationTests
 
     [Theory]
     [InlineData("Ñ")]
-    [InlineData("Space")]
-    [InlineData("Delete")]
-    [InlineData("Escape")]
+    [InlineData("Semicolon")]
+    [InlineData("CapsLock")]
     [InlineData("NoExisteEstaTecla")]
     public void TheKeysThatUsedToPass_ButAreNotApproved_AreNowRejected(string name)
     {
@@ -81,7 +80,7 @@ public class SendKeysActionValidationTests
     [Fact]
     public void TheMessage_ListsTheApprovedKeys()
     {
-        var problem = Assert.Single(Action("Space").GetProblems());
+        var problem = Assert.Single(Action("Ñ").GetProblems());
 
         Assert.Contains(KeyVocabulary.Description, problem);
     }
@@ -107,7 +106,7 @@ public class SendKeysActionValidationTests
     [Fact]
     public void AnInvalidKey_AndInvalidModifiers_AreBothReported()
     {
-        Assert.Equal(2, Action("Space", (KeyModifiers)64).GetProblems().Count());
+        Assert.Equal(2, Action("Ñ", (KeyModifiers)64).GetProblems().Count());
     }
 
     [Fact]

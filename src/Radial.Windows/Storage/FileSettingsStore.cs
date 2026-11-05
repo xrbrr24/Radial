@@ -1,4 +1,5 @@
 using System.Text;
+using Radial.Core.Catalog;
 using Radial.Core.Model;
 using Radial.Core.Storage;
 using Radial.Core.Validation;
@@ -123,6 +124,9 @@ public sealed class FileSettingsStore : ISettingsStore
             {
                 return SettingsSaveResult.Failed("La configuración del disco es de una versión posterior de Radial y no se sobrescribe.");
             }
+
+            // Toda acción conocida queda enlazada a la biblioteca antes de validar y de escribir.
+            configuration = LibraryResolver.Normalize(configuration);
 
             var validation = ConfigurationValidator.Validate(configuration);
             if (!validation.IsValid)

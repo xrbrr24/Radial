@@ -72,6 +72,11 @@ public sealed record SendKeysAction(KeyChord Chord) : RadialAction
             problems.Add("La combinación contiene modificadores desconocidos.");
         }
 
+        if (ShortcutRules.GetProblem(Chord) is { } reserved)
+        {
+            problems.Add(reserved);
+        }
+
         return problems;
     }
 }

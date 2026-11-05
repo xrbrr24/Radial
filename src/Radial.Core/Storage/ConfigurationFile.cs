@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Radial.Core.Catalog;
 using Radial.Core.Geometry;
 using Radial.Core.Model;
 using Radial.Core.Validation;
@@ -45,7 +46,7 @@ public sealed record ConfigurationParseResult(
 public static class ConfigurationFile
 {
     /// <summary>Versión del esquema que escribe esta versión de Radial.</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>Tamaño máximo de un archivo de configuración, en bytes.</summary>
     public const int MaxBytes = 1_048_576;
@@ -64,6 +65,9 @@ public static class ConfigurationFile
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // Toda acción conocida de un menú queda enlazada a la biblioteca: la acción se guarda una sola vez.
+        configuration = LibraryResolver.Normalize(configuration);
+
         var dto = new ConfigFileDto
         {
             SchemaVersion = CurrentSchemaVersion,
@@ -79,6 +83,7 @@ public static class ConfigurationFile
                 BackDwellMs = configuration.Navigation.BackDwell.TotalMilliseconds,
                 MaxDepth = configuration.Navigation.MaxDepth,
             },
+            Actions = [.. configuration.Actions.Select(ToDto)],
             Menus = [.. configuration.Menus.Select(ToDto)],
         };
 
@@ -148,9 +153,10 @@ public static class ConfigurationFile
                 version);
         }
 
+        var notes = new List<ValidationIssue>();
         try
         {
-            migrator.Migrate(root, version);
+            migrator.Migrate(root, version, notes);
         }
         catch (Exception exception) when (exception is InvalidOperationException or JsonException or ArgumentException or NotSupportedException)
         {
@@ -174,7 +180,7 @@ public static class ConfigurationFile
             return Fail(ConfigurationParseStatus.Corrupt, ConfigurationCodes.StructureInvalid, "$", "El archivo está vacío.", version);
         }
 
-        var issues = new List<ValidationIssue>();
+        var issues = new List<ValidationIssue>(notes);
         var configuration = ToModel(dto, issues);
         if (configuration is null)
         {
@@ -200,17 +206,46 @@ public static class ConfigurationFile
         Items = [.. menu.Items.Select(ToDto)],
     };
 
-    private static ItemDto ToDto(RadialItem item) => new()
+    private static ActionDefDto ToDto(ActionDefinition definition) => new()
     {
-        Id = item.Id.Value,
-        Name = item.Name,
-        Position = item.Position.ToString(),
-        Icon = item.Icon is null
-            ? null
-            : new IconDto { Source = item.Icon.Source == IconSource.File ? "file" : "glyph", Value = item.Icon.Value },
-        DefinitionId = item.DefinitionId,
-        Action = ActionJson.ToJson(item.Action),
+        Id = definition.Id,
+        Name = definition.Name,
+        Description = definition.Description.Length > 0 ? definition.Description : null,
+        Category = definition.Category.Id,
+        Tags = definition.TagList.Count > 0 ? [.. definition.TagList] : null,
+        BuiltIn = definition.IsBuiltIn ? true : null,
+        Icon = ToDto(definition.Icon),
+        Action = ActionJson.ToJson(definition.Action),
     };
+
+    private static IconDto? ToDto(IconReference? icon) =>
+        icon is null ? null : new IconDto { Source = icon.Source == IconSource.File ? "file" : "glyph", Value = icon.Value };
+
+    private static ItemDto ToDto(RadialItem item)
+    {
+        // Colocación enlazada: solo la referencia y los ajustes propios; la acción vive en la biblioteca.
+        if (item.DefinitionId is not null && !item.IsGroup && !item.IsUnsupported)
+        {
+            return new ItemDto
+            {
+                Id = item.Id.Value,
+                Position = item.Position.ToString(),
+                ActionId = item.DefinitionId,
+                Label = item.LabelOverride,
+                Icon = ToDto(item.IconOverride),
+            };
+        }
+
+        // Grupo o acción de tipo desconocido: la acción va en el propio elemento.
+        return new ItemDto
+        {
+            Id = item.Id.Value,
+            Name = item.Name,
+            Position = item.Position.ToString(),
+            Icon = ToDto(item.Icon),
+            Action = ActionJson.ToJson(item.Action),
+        };
+    }
 
     // DTO -> modelo. Devuelve null si hubo errores de lectura (están en issues).
 
@@ -238,6 +273,18 @@ public static class ConfigurationFile
             };
         }
 
+        var library = new List<ActionDefinition>();
+        var libraryById = new Dictionary<string, ActionDefinition>(StringComparer.Ordinal);
+        for (var index = 0; index < (dto.Actions?.Count ?? 0); index++)
+        {
+            var definition = ToDefinition(dto.Actions![index], $"actions[{index}]", issues);
+            if (definition is not null)
+            {
+                library.Add(definition);
+                libraryById.TryAdd(definition.Id, definition); // con ids repetidos manda el primero; la validación señala el duplicado
+            }
+        }
+
         var menus = new List<RadialMenu>();
         for (var menuIndex = 0; menuIndex < (dto.Menus?.Count ?? 0); menuIndex++)
         {
@@ -252,7 +299,7 @@ public static class ConfigurationFile
             var items = new List<RadialItem>();
             for (var itemIndex = 0; itemIndex < (menuDto.Items?.Count ?? 0); itemIndex++)
             {
-                var item = ToItem(menuDto.Items![itemIndex], $"menus[{menuLabel}].items[{itemIndex}]", issues);
+                var item = ToItem(menuDto.Items![itemIndex], $"menus[{menuLabel}].items[{itemIndex}]", libraryById, issues);
                 if (item is not null)
                 {
                     items.Add(item);
@@ -268,12 +315,79 @@ public static class ConfigurationFile
             {
                 RootMenuId = new MenuId(dto.RootMenuId ?? string.Empty),
                 Menus = menus,
+                Actions = library,
                 Geometry = geometry,
                 Navigation = navigation,
             };
     }
 
-    private static RadialItem? ToItem(ItemDto? dto, string path, List<ValidationIssue> issues)
+    private static ActionDefinition? ToDefinition(ActionDefDto? dto, string path, List<ValidationIssue> issues)
+    {
+        if (dto is null)
+        {
+            issues.Add(FieldError(path, "Hay una acción vacía (null) en la biblioteca."));
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Id))
+        {
+            path = $"actions[{dto.Id}]";
+        }
+
+        var before = issues.Count;
+        var icon = ToIcon(dto.Icon, $"{path}.icon", issues);
+        if (dto.Icon is null)
+        {
+            issues.Add(FieldError($"{path}.icon", "Falta el icono de la acción."));
+        }
+
+        RadialAction? action = null;
+        if (dto.Action is null)
+        {
+            issues.Add(new ValidationIssue(ValidationSeverity.Error, ValidationCodes.ActionMissing, "La acción de la biblioteca no tiene acción.", $"{path}.action"));
+        }
+        else
+        {
+            action = ActionJson.FromJson(dto.Action, $"{path}.action", issues);
+        }
+
+        return issues.Count > before || action is null || icon is null
+            ? null
+            : new ActionDefinition(
+                dto.Id ?? string.Empty,
+                dto.Name ?? string.Empty,
+                new ActionCategory(dto.Category ?? ActionCategory.Custom.Id),
+                dto.Description ?? string.Empty,
+                icon,
+                action,
+                dto.Tags is { Count: > 0 } ? dto.Tags : null,
+                dto.BuiltIn ?? false);
+    }
+
+    private static IconReference? ToIcon(IconDto? iconDto, string path, List<ValidationIssue> issues)
+    {
+        if (iconDto is null)
+        {
+            return null;
+        }
+
+        var source = iconDto.Source?.ToLowerInvariant() switch
+        {
+            "glyph" => IconSource.Glyph,
+            "file" => IconSource.File,
+            _ => (IconSource?)null,
+        };
+
+        if (source is null)
+        {
+            issues.Add(FieldError($"{path}.source", "El origen del icono debe ser «glyph» o «file»."));
+            return null;
+        }
+
+        return new IconReference(source.Value, iconDto.Value ?? string.Empty);
+    }
+
+    private static RadialItem? ToItem(ItemDto? dto, string path, Dictionary<string, ActionDefinition> library, List<ValidationIssue> issues)
     {
         if (dto is null)
         {
@@ -288,30 +402,41 @@ public static class ConfigurationFile
 
         var before = issues.Count;
 
-        var position = RadialDirection.North;
-        if (!TryParseDirection(dto.Position, out position))
+        if (!TryParseDirection(dto.Position, out var position))
         {
             issues.Add(FieldError($"{path}.position", "La posición debe ser una de: " + string.Join(", ", Enum.GetNames<RadialDirection>()) + "."));
         }
 
-        IconReference? icon = null;
-        if (dto.Icon is { } iconDto)
-        {
-            var source = iconDto.Source?.ToLowerInvariant() switch
-            {
-                "glyph" => IconSource.Glyph,
-                "file" => IconSource.File,
-                _ => (IconSource?)null,
-            };
+        var icon = ToIcon(dto.Icon, $"{path}.icon", issues);
 
-            if (source is null)
+        // Colocación enlazada a la biblioteca: la acción, el nombre y el icono salen de la definición (salvo los propios).
+        if (dto.ActionId is not null)
+        {
+            if (dto.Action is not null)
             {
-                issues.Add(FieldError($"{path}.icon.source", "El origen del icono debe ser «glyph» o «file»."));
+                issues.Add(new ValidationIssue(ValidationSeverity.Error, ConfigurationCodes.ItemActionConflict,
+                    "El elemento tiene «actionId» y «action» a la vez: la acción tiene que estar en un solo sitio.", path));
+                return null;
             }
-            else
+
+            if (!library.TryGetValue(dto.ActionId, out var definition))
             {
-                icon = new IconReference(source.Value, iconDto.Value ?? string.Empty);
+                issues.Add(new ValidationIssue(ValidationSeverity.Error, ConfigurationCodes.ActionRefMissing,
+                    $"El elemento referencia la acción '{dto.ActionId}', que no está en la biblioteca.", $"{path}.actionId"));
+                return null;
             }
+
+            if (issues.Count > before)
+            {
+                return null;
+            }
+
+            var placement = new RadialItem(new ItemId(dto.Id ?? string.Empty), dto.Label ?? definition.Name, position, definition.Action, null, definition.Id)
+            {
+                LabelOverride = dto.Label,
+                IconOverride = icon,
+            };
+            return LibraryResolver.Materialize(placement, definition);
         }
 
         RadialAction? action = null;

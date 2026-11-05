@@ -300,8 +300,8 @@ public class ShortcutActionExecutorTests
 
     [Theory]
     [InlineData("Ñ")]
-    [InlineData("Escape")]
-    [InlineData("Space")]
+    [InlineData("Esc")]
+    [InlineData("CapsLock")]
     [InlineData("Ctrl")]
     [InlineData("")]
     [InlineData("  ")]

@@ -13,7 +13,14 @@ public class KeyVocabularyTests
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
         "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
         "F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24",
-        "Enter", "Tab", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown",
+        "Enter", "Tab", "Space", "Escape", "Backspace", "Delete", "Insert",
+        "Home", "End", "PageUp", "PageDown", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown",
+        "Numpad0", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7", "Numpad8", "Numpad9",
+        "NumpadMultiply", "NumpadAdd", "NumpadSubtract", "NumpadDecimal", "NumpadDivide", "NumpadEnter",
+        "PrintScreen", "Pause", "ContextMenu",
+        "Oem1", "OemPlus", "OemComma", "OemMinus", "OemPeriod", "Oem2", "Oem3", "Oem4", "Oem5", "Oem6", "Oem7", "Oem8", "Oem102",
+        "MediaPlayPause", "MediaNextTrack", "MediaPreviousTrack", "MediaStop", "VolumeUp", "VolumeDown", "VolumeMute",
+        "BrowserBack", "BrowserForward", "BrowserRefresh", "BrowserHome",
     ];
 
     public static TheoryData<string> ApprovedNames => new(Approved);
@@ -21,9 +28,9 @@ public class KeyVocabularyTests
     public static TheoryData<string> RejectedNames =>
     [
         "Ñ", "ñ", "Á", "é", "Ａ", "K", "ſ", "ı", // no ASCII, o que lo parece
-        "Space", "Delete", "Del", "Escape", "Esc", "Backspace", "Insert", "Home", "End", "PageUp", "PageDown", // fuera del vocabulario
-        "Numpad0", "NumPad5", "NumpadEnter", "NumericEnter", "Return", "Left", "Right", "Up", "Down", // numpad, alias
-        "Arrow Left", "ArrowLeft2", "Ctrl", "Control", "Shift", "Alt", "Win", "AA", "A+B", "Unknown", "OEM_PLUS",
+        "Del", "Esc", "Backspace2", "PgUp", "PgDn", "Ins", "Return", "Left", "Right", "Up", "Down", "Spacebar", // alias: no hay
+        "NumericEnter", "Numpad10", "Num0", "KeypadEnter", "CapsLock", "NumLock", "ScrollLock", // fuera del vocabulario
+        "Arrow Left", "ArrowLeft2", "Ctrl", "Control", "Shift", "Alt", "Win", "AA", "A+B", "Unknown", "OEM_PLUS", "Oem0", "Oem9", "Oem103", "Semicolon",
         "F0", "F25", "F01", "F100", "F-1", "10", "-1",
         "!", "-", "+", "=", ",", ".", ";", "'", "`", "[", "\\", "/", "<", "º", // símbolos
         "", " ", " A", "A ", "\tTab", "Enter ", "A\n", "A\0", "\0", // vacío o con espacios: no se recorta nada
@@ -32,7 +39,7 @@ public class KeyVocabularyTests
     [Fact]
     public void Names_AreExactlyTheApprovedVocabulary()
     {
-        Assert.Equal(66, KeyVocabulary.Names.Count);
+        Assert.Equal(118, KeyVocabulary.Names.Count);
         Assert.Equal(Approved.Order(StringComparer.Ordinal), KeyVocabulary.Names.Order(StringComparer.Ordinal));
         Assert.Equal(KeyVocabulary.Names.Count, KeyVocabulary.Names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
@@ -42,9 +49,9 @@ public class KeyVocabularyTests
     {
         var list = (IList<string>)KeyVocabulary.Names;
 
-        Assert.Throws<NotSupportedException>(() => list.Add("Space"));
+        Assert.Throws<NotSupportedException>(() => list.Add("Nueva"));
         Assert.Throws<NotSupportedException>(() => list[0] = "Z");
-        Assert.Equal(66, KeyVocabulary.Names.Count);
+        Assert.Equal(118, KeyVocabulary.Names.Count);
     }
 
     [Theory]
@@ -108,8 +115,32 @@ public class KeyVocabularyTests
     }
 
     [Fact]
-    public void TheDescription_IsBuiltFromTheSameDefinition()
+    public void TheDescription_MentionsEveryGroupOfTheVocabulary()
     {
-        Assert.Equal("A–Z, 0–9, F1–F24, Enter, Tab, ArrowLeft, ArrowUp, ArrowRight, ArrowDown", KeyVocabulary.Description);
+        Assert.StartsWith("A–Z, 0–9, F1–F24", KeyVocabulary.Description);
+        foreach (var part in new[] { "Space", "Escape", "Backspace", "Delete", "PageDown", "ArrowDown", "Numpad0", "NumpadEnter", "PrintScreen", "Oem1", "Oem102", "MediaPlayPause", "VolumeMute", "BrowserBack" })
+        {
+            Assert.Contains(part, KeyVocabulary.Description);
+        }
+    }
+
+    [Fact]
+    public void EveryKey_BelongsToAGroup_AndHasAFallbackText()
+    {
+        Assert.Equal(KeyVocabulary.Names, KeyVocabulary.All.Select(k => k.Name));
+        Assert.All(KeyVocabulary.All, key => Assert.False(string.IsNullOrWhiteSpace(key.Fallback)));
+        Assert.Equal(26, KeyVocabulary.All.Count(k => k.Group == KeyGroup.Letters));
+        Assert.Equal(16, KeyVocabulary.All.Count(k => k.Group == KeyGroup.Numpad));
+        Assert.Equal(13, KeyVocabulary.All.Count(k => k.Group == KeyGroup.Punctuation));
+    }
+
+    [Fact]
+    public void PunctuationKeys_AreNamedByTheirVirtualKey_NotByTheCharacterTheyProduce()
+    {
+        // El carácter depende de la distribución (Oem3 es la Ñ en un teclado español): el nombre guardado no.
+        Assert.True(KeyVocabulary.TryGetCanonicalName("oem3", out var name));
+        Assert.Equal("Oem3", name);
+        Assert.False(KeyVocabulary.TryGetCanonicalName("Ñ", out _));
+        Assert.All(KeyVocabulary.All.Where(k => k.Group == KeyGroup.Punctuation), k => Assert.StartsWith("Oem", k.Name, StringComparison.Ordinal));
     }
 }

@@ -16,7 +16,7 @@ public class ActionPlacementTests
     private static readonly MenuId Sub = new("sub");
 
     private static RadialConfiguration Configuration(params RadialMenu[] menus) =>
-        new() { RootMenuId = Main, Menus = menus };
+        new() { RootMenuId = Main, Actions = BuiltInShortcuts.All, Menus = menus };
 
     [Fact]
     public void ADerivedItemId_CombinesTheMenuAndTheDefinition()
