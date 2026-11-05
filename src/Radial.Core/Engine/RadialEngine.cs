@@ -109,6 +109,7 @@ public sealed class RadialEngine
         var result = SelectedDirection is null ? RadialResult.Cancelled(CancelReason.NoSelection)
             : SelectedItem is not { } item ? RadialResult.Cancelled(CancelReason.EmptySlot)
             : item.IsGroup ? RadialResult.Cancelled(CancelReason.GroupNotEntered)
+            : item.IsUnsupported ? RadialResult.Cancelled(CancelReason.UnsupportedAction)
             : RadialResult.Executed(item);
 
         Reset();

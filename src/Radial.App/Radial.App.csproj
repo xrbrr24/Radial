@@ -5,8 +5,19 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Solo para NotifyIcon (bandeja del sistema), que forma parte del entorno de ejecución de escritorio: sin paquetes. La interfaz es WPF. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFO0003 (analizador de Windows Forms) pide quitar el DPI del manifiesto. No procede: la interfaz es WPF, WinForms solo aporta
+         NotifyIcon y PerMonitorV2 en app.manifest es una decisión fijada del proyecto (CLAUDE.md, DPI). -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Sin estos usings implícitos, nombres como Application, Brushes, Point o Size serían ambiguos entre WPF y Windows Forms/Drawing. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Radial.Core\Radial.Core.csproj" />

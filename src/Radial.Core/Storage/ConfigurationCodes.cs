@@ -1,0 +1,18 @@
+namespace Radial.Core.Storage;
+
+/// <summary>Códigos estables de los problemas al leer una configuración (los comprueban las pruebas, no los mensajes).</summary>
+public static class ConfigurationCodes
+{
+    public const string TooLarge = "config.too-large";
+    public const string JsonInvalid = "config.json-invalid";
+    public const string RootInvalid = "config.root-invalid";
+    public const string StructureInvalid = "config.structure-invalid";
+    public const string SchemaVersionMissing = "config.schema-version-missing";
+    public const string SchemaVersionInvalid = "config.schema-version-invalid";
+    public const string SchemaVersionFuture = "config.schema-version-future";
+    public const string MigrationFailed = "config.migration-failed";
+    public const string FieldInvalid = "config.field-invalid";
+    public const string ActionTypeMissing = "config.action-type-missing";
+    public const string ActionTypeInvalid = "config.action-type-invalid";
+    public const string ActionPropertyInvalid = "config.action-property-invalid";
+}

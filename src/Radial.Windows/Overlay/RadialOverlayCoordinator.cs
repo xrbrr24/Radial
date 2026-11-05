@@ -9,38 +9,66 @@ using Radial.Windows.Input;
 namespace Radial.Windows.Overlay;
 
 /// <summary>
+/// Progreso de las dos permanencias que el motor mide (entrar en un grupo y volver atrás), para que la ventana lo dibuje. Los
+/// valores están en [0, 1]; <see cref="BackArmed"/> dice si volver por el centro ya está permitido (el cursor salió antes del centro).
+/// </summary>
+public readonly record struct RadialProgress(double Submenu, double Back, bool BackArmed);
+
+/// <summary>
 /// Lo que el coordinador necesita de la ventana del overlay. La implementa Radial.App con WPF; las pruebas, con un doble.
-/// Todas las llamadas llegan desde el hilo de la interfaz.
+/// Todas las llamadas llegan desde el hilo de la interfaz. El estado que se presenta es: el menú actual (y su nivel), el centro
+/// donde está colocado, el sector resaltado y el progreso de las permanencias.
 /// </summary>
 public interface IRadialPresenter
 {
     /// <summary>
-    /// Muestra el radial centrado en <paramref name="center"/> (píxeles físicos) y sin activar la ventana.
+    /// Muestra el radial del menú raíz centrado en <paramref name="center"/> (píxeles físicos) y sin activar la ventana.
     /// </summary>
     /// <returns>El factor píxeles físicos / DIP del monitor donde quedó (1.25 al 125 %); el coordinador lo usa para medir en DIP.</returns>
     double Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center);
 
+    /// <summary>
+    /// Cambia el menú que se muestra (entrar en un grupo o volver atrás) y recoloca la ventana ya visible centrada en
+    /// <paramref name="center"/>, SIN ocultarla, recrearla ni parpadear. La selección y el progreso quedan a cero.
+    /// <paramref name="depth"/> es el número de menús apilados, raíz incluida (1 = menú raíz): con más de uno el centro ofrece volver.
+    /// </summary>
+    /// <returns>El factor píxeles físicos / DIP del monitor donde quedó la ventana (como <see cref="Show"/>).</returns>
+    double ShowMenu(RadialMenu menu, int depth, ScreenPoint center);
+
     /// <summary>Resalta un sector; <c>null</c> quita el resalte (cursor en la zona central).</summary>
     void SetSelection(RadialDirection? direction);
+
+    /// <summary>Actualiza el progreso de la permanencia para entrar en un grupo o para volver atrás.</summary>
+    void SetProgress(RadialProgress progress);
 
     void Hide();
 }
 
 /// <summary>
 /// Une el gesto global, el motor del radial y la ventana del overlay: al activarse el gesto muestra el menú sobre el cursor, mientras
-/// dura resalta el sector bajo el cursor y al terminar lo oculta. Es el «coordinador» de la fase 4: no sabe de WPF ni de hooks.
+/// dura resalta el sector bajo el cursor, dibuja el progreso de la permanencia y cambia de menú cuando el motor entra en un grupo o
+/// vuelve atrás, y al terminar lo oculta. No sabe de WPF ni de hooks.
 /// Si se le da un <see cref="IActionExecutor"/>, al confirmar un elemento ejecutable pide su ejecución (sin bloquear: la acción
 /// puede esperar, p. ej. a que se suelte Ctrl) e informa del resultado con <see cref="ActionFinished"/>; sin ejecutor, solo
 /// informa de lo elegido. Una acción pendiente se cancela al empezar otro gesto, al aislar el coordinador y al cerrarlo.
 ///
-/// Navegación entre menús: NO soportada todavía en el overlay (fase 5). El motor sabe entrar en un submenú por permanencia, pero este
-/// coordinador y la ventana solo representan el menú raíz. Para que nunca se vea un menú y se ejecute otro, si el motor deja de
-/// estar en el menú que se mostró el gesto se cancela de forma segura: se oculta el overlay, se abandona el motor, no se ejecuta
-/// nada y se avisa con <see cref="UnsupportedNavigation"/>. Esto incluye la confirmación: la posición del evento de soltar se
-/// aplica ANTES de confirmar y, si con ella el motor cambia de menú, no se confirma.
+/// Navegación entre menús (fase 5): el motor decide cuándo se entra en un grupo (permanencia) o se vuelve atrás; este coordinador lo
+/// refleja en la ventana. Cuando cambia el menú del motor se llama a <see cref="IRadialPresenter.ShowMenu"/> para el menú nuevo,
+/// centrado donde el motor recentró (la posición del cursor en ese instante), con la ventana ya visible. Los submenús se
+/// anidan hasta <c>MaxDepth</c> y las permanencias son las de la configuración.
 ///
-/// Todo se mide en DIP relativos al centro del radial, porque así está dibujado (el radio de la zona central de la configuración
-/// coincide con el del botón central dibujado, a cualquier DPI). El cursor llega en píxeles físicos y se divide por la escala.
+/// Coordenadas: el motor trabaja en UN solo sistema de DIP durante toda la interacción (el del primer centro). El coordinador solo
+/// convierte entre píxeles físicos y ese sistema con un ANCLA (píxel físico de un punto y su coordenada en el motor) y la escala
+/// del monitor donde está el radial: <c>motor = ancla.motor + (píxel − ancla.píxel) / escala</c>. Al cambiar de menú, el motor
+/// pone su origen geométrico en el cursor; el centro FÍSICO de la ventana es ese mismo punto convertido de vuelta, y se re-ancla ahí
+/// con la escala del monitor donde quedó. Así el origen no se resta dos veces ni la conversión se desincroniza, y las coordenadas del
+/// motor son continuas aunque la ventana cambie de sitio.
+///
+/// Protección contra estados incoherentes: la pila de menús que muestra el coordinador se compara con la del motor tras cada
+/// actualización. Solo se admiten tres situaciones: igual, un nivel más (entrar) o un nivel menos (volver). Cualquier otra (un salto
+/// de varios niveles, otro menú, una pila vacía) cancela el gesto de forma segura: se oculta el overlay, se abandona el motor, no se
+/// ejecuta nada y se avisa con <see cref="UnsupportedNavigation"/>. Nunca puede haber un menú mostrado distinto del que decide
+/// qué se ejecuta.
 ///
 /// Autoprueba sintética: una autoprueba NUNCA debe mostrar el overlay ni ejecutar una acción. Hay tres barreras independientes:
 /// (1) la marca <see cref="GestureEvent.SyntheticWindow"/> que el servicio de captura pone a todo evento publicado mientras acepta
@@ -59,10 +87,15 @@ public sealed class RadialOverlayCoordinator
     private readonly IActionExecutor? _executor;
 
     private CancellationTokenSource? _pendingAction;
-    private ScreenPoint _originPixels;
-    private RadialMenu? _presentedMenu;
+    // Conversión píxeles físicos <-> sistema DIP del motor (ver el resumen de la clase): un ancla y la escala del monitor actual.
+    private ScreenPoint _anchorPixels;
+    private PointD _anchorEngine;
     private double _scale = 1.0;
+
+    // Lo que la ventana está mostrando: la pila de menús (espejo de la del motor), el sector resaltado y el progreso.
+    private readonly List<RadialMenu> _presented = [];
     private RadialDirection? _shown;
+    private RadialProgress _progress;
     private bool _isolated;
     private bool _visible;
     private long _ignoreBefore;
@@ -109,16 +142,23 @@ public sealed class RadialOverlayCoordinator
     public event Action<CancelCause>? Aborted;
 
     /// <summary>
-    /// El motor pasó a otro menú (submenú o vuelta atrás) que el overlay no sabe representar: el gesto se canceló sin ejecutar nada
-    /// y el overlay se ocultó. El argumento es el menú al que habría pasado. Se produce DESPUÉS de ocultar y soltar el motor; no
-    /// se produce <see cref="Completed"/> ni <see cref="Aborted"/> por el mismo gesto.
+    /// La ventana pasó a mostrar otro menú porque el motor entró en un grupo o volvió atrás (menú nuevo y número de menús apilados,
+    /// raíz incluida). Se produce después de recolocar la ventana.
+    /// </summary>
+    public event Action<RadialMenu, int>? MenuChanged;
+
+    /// <summary>
+    /// La pila de menús del motor no es coherente con la que se muestra (ni igual, ni un nivel más, ni un nivel menos): el gesto se
+    /// canceló sin ejecutar nada y el overlay se ocultó. El argumento es el menú actual del motor. Se produce DESPUÉS de ocultar y
+    /// soltar el motor; no se produce <see cref="Completed"/> ni <see cref="Aborted"/> por el mismo gesto. No debería ocurrir; es
+    /// la red de seguridad que evita mostrar un menú y ejecutar otro.
     /// </summary>
     public event Action<MenuId>? UnsupportedNavigation;
 
     /// <summary>
     /// Un suscriptor de <see cref="Completed"/>, <see cref="ActionFinished"/>, <see cref="Aborted"/> o
-    /// <see cref="UnsupportedNavigation"/> lanzó una excepción (nombre del evento y excepción). Todos se invocan suscriptor a suscriptor y siempre DESPUÉS de haber ocultado el overlay y soltado
-    /// el estado del motor, así que ningún suscriptor puede impedir eso. Un suscriptor defectuoso tampoco impide ejecutar la acción
+    /// <see cref="UnsupportedNavigation"/> lanzó una excepción (nombre del evento y excepción). Todos se invocan suscriptor a
+    /// suscriptor y siempre DESPUÉS de haber ocultado el overlay y soltado el estado del motor, así que ningún suscriptor puede impedir eso. Un suscriptor defectuoso tampoco impide ejecutar la acción
     /// confirmada ni que los demás reciban el aviso, y su fallo se comunica aquí. Si un suscriptor de este evento también lanza,
     /// se ignora.
     /// </summary>
@@ -185,26 +225,24 @@ public sealed class RadialOverlayCoordinator
         // Un gesto nuevo sustituye a lo que siguiera pendiente del anterior.
         CancelPendingAction();
         _engine.Start(new PointD(0, 0));
-        _originPixels = center;
+        _anchorPixels = center;
+        _anchorEngine = new PointD(0, 0);
         _shown = null;
+        _progress = default;
 
         // Visible antes de llamar: si Show falla a medias, Close ocultará lo que haya quedado.
         var root = RootMenu();
-        _presentedMenu = root;
+        _presented.Clear();
+        _presented.Add(root);
         _visible = true;
         try
         {
-            _scale = _presenter.Show(root, _configuration.Geometry, center);
+            _scale = SanitizeScale(_presenter.Show(root, _configuration.Geometry, center));
         }
         catch
         {
             Close();
             throw;
-        }
-
-        if (!double.IsFinite(_scale) || _scale <= 0)
-        {
-            _scale = 1.0;
         }
 
         // El cursor pudo moverse entre la pulsación y este instante.
@@ -346,19 +384,29 @@ public sealed class RadialOverlayCoordinator
     }
 
     /// <returns>
-    /// <c>false</c> si el motor pasó a un menú distinto del mostrado: el gesto ya se canceló (overlay oculto, motor abandonado,
-    /// <see cref="UnsupportedNavigation"/> avisado) y quien llama no debe seguir con él. La selección nueva NO se comunica al
-    /// presentador en ese caso: sería una dirección de otro menú.
+    /// <c>false</c> si la pila de menús del motor es incoherente con la mostrada: el gesto ya se canceló (overlay oculto, motor
+    /// abandonado, <see cref="UnsupportedNavigation"/> avisado) y quien llama no debe seguir con él. En ese caso la selección nueva NO
+    /// se comunica al presentador: sería una dirección de un menú que no es el que se ve.
     /// </returns>
     private bool Update(ScreenPoint pointer)
     {
-        _engine.UpdatePointer(new PointD((pointer.X - _originPixels.X) / _scale, (pointer.Y - _originPixels.Y) / _scale));
+        _engine.UpdatePointer(ToEngine(pointer));
 
-        if (_engine.CurrentMenu is { } current && !ReferenceEquals(current, _presentedMenu))
+        switch (Classify(_presented, _engine.NavigationStack))
         {
-            Close();
-            Raise(UnsupportedNavigation, nameof(UnsupportedNavigation), current.Id);
-            return false;
+            case NavigationStep.None:
+                break;
+
+            case NavigationStep.Enter:
+            case NavigationStep.Back:
+                Navigate();
+                break;
+
+            default:
+                var current = _engine.CurrentMenu;
+                Close();
+                Raise(UnsupportedNavigation, nameof(UnsupportedNavigation), current?.Id ?? default);
+                return false;
         }
 
         var selected = _engine.SelectedDirection;
@@ -368,6 +416,111 @@ public sealed class RadialOverlayCoordinator
             _presenter.SetSelection(selected);
         }
 
+        var progress = new RadialProgress(_engine.SubmenuProgress, _engine.BackProgress, _engine.IsBackArmed);
+        if (progress != _progress)
+        {
+            _progress = progress;
+            _presenter.SetProgress(progress);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// El motor entró en un grupo o volvió atrás y recentró su origen en el cursor: cambia el menú de la ventana, que se recoloca
+    /// con ese punto como centro físico sin ocultarse, y se re-ancla la conversión de coordenadas ahí con la escala del monitor donde
+    /// quedó. La selección y el progreso empiezan de cero (el motor los reinició).
+    /// </summary>
+    private void Navigate()
+    {
+        var menu = _engine.CurrentMenu!;
+        var depth = _engine.NavigationStack.Count;
+        var center = FromEngine(_engine.Origin);
+
+        double scale;
+        try
+        {
+            scale = SanitizeScale(_presenter.ShowMenu(menu, depth, center));
+        }
+        catch
+        {
+            Close();
+            throw;
+        }
+
+        _anchorPixels = center;
+        _anchorEngine = _engine.Origin;
+        _scale = scale;
+        _presented.Clear();
+        _presented.AddRange(_engine.NavigationStack);
+        _shown = null;
+        _progress = default;
+        Raise(MenuChanged, nameof(MenuChanged), menu, depth);
+    }
+
+    // motor = ancla.motor + (píxel − ancla.píxel) / escala
+    private PointD ToEngine(ScreenPoint pixels) => new(
+        _anchorEngine.X + ((pixels.X - _anchorPixels.X) / _scale),
+        _anchorEngine.Y + ((pixels.Y - _anchorPixels.Y) / _scale));
+
+    // píxel = ancla.píxel + (motor − ancla.motor) · escala
+    private ScreenPoint FromEngine(PointD point) => new(
+        _anchorPixels.X + (int)Math.Round((point.X - _anchorEngine.X) * _scale),
+        _anchorPixels.Y + (int)Math.Round((point.Y - _anchorEngine.Y) * _scale));
+
+    private static double SanitizeScale(double scale) => double.IsFinite(scale) && scale > 0 ? scale : 1.0;
+
+    /// <summary>Cómo se relaciona la pila de menús del motor con la que muestra la ventana.</summary>
+    internal enum NavigationStep
+    {
+        /// <summary>Es la misma: no hay que cambiar nada.</summary>
+        None,
+
+        /// <summary>El motor tiene un menú más (entró en un grupo): la pila mostrada es un prefijo de la del motor.</summary>
+        Enter,
+
+        /// <summary>El motor tiene un menú menos (volvió atrás): la pila del motor es un prefijo de la mostrada.</summary>
+        Back,
+
+        /// <summary>Cualquier otra cosa: pila vacía, otro menú, un salto de varios niveles.</summary>
+        Inconsistent,
+    }
+
+    internal static NavigationStep Classify(IReadOnlyList<RadialMenu> presented, IReadOnlyList<RadialMenu> engine)
+    {
+        if (presented.Count == 0 || engine.Count == 0)
+        {
+            return NavigationStep.Inconsistent;
+        }
+
+        if (engine.Count == presented.Count)
+        {
+            return IsPrefix(engine, presented, engine.Count) ? NavigationStep.None : NavigationStep.Inconsistent;
+        }
+
+        if (engine.Count == presented.Count + 1)
+        {
+            return IsPrefix(presented, engine, presented.Count) ? NavigationStep.Enter : NavigationStep.Inconsistent;
+        }
+
+        if (engine.Count == presented.Count - 1)
+        {
+            return IsPrefix(engine, presented, engine.Count) ? NavigationStep.Back : NavigationStep.Inconsistent;
+        }
+
+        return NavigationStep.Inconsistent;
+    }
+
+    private static bool IsPrefix(IReadOnlyList<RadialMenu> shorter, IReadOnlyList<RadialMenu> longer, int count)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            if (!ReferenceEquals(shorter[index], longer[index]))
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -375,8 +528,9 @@ public sealed class RadialOverlayCoordinator
     private void Close()
     {
         _engine.Cancel();
-        _presentedMenu = null;
+        _presented.Clear();
         _shown = null;
+        _progress = default;
         if (_visible)
         {
             _visible = false;

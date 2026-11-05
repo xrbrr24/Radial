@@ -21,6 +21,7 @@ internal static class GlyphCatalog
         ["Undo"] = "",
         ["SelectAll"] = "",
         ["Save"] = "",
+        ["Apps"] = "",
     };
 
     public static string Resolve(IconReference? icon) =>

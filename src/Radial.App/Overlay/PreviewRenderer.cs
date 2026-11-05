@@ -5,6 +5,9 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Radial.Core.Geometry;
+using Radial.Core.Model;
+using Radial.Windows.Overlay;
+using Radial.Windows.Storage;
 
 namespace Radial.App.Overlay;
 
@@ -17,26 +20,48 @@ namespace Radial.App.Overlay;
 internal static class PreviewRenderer
 {
     private const double Scale = 1.5;
+    private const int Panels = 5;
 
     public static void Render(string path)
     {
-        var configuration = ProvisionalMenu.Create();
-        configuration.TryGetMenu(configuration.RootMenuId, out var menu);
+        var configuration = DefaultConfiguration.Create();
+        configuration.TryGetMenu(configuration.RootMenuId, out var root);
+        configuration.TryGetMenu(new MenuId(DefaultConfiguration.OpenMenuName), out var open);
 
-        RadialDirection?[] selections = [null, RadialDirection.NorthEast, RadialDirection.South];
+        // Un menú con una acción de tipo desconocido (se conserva en la configuración pero no se puede usar), solo para verla.
+        var unsupported = new RadialMenu(
+            new MenuId("preview"),
+            "Vista previa",
+            [
+                root!.Items[0],
+                new RadialItem(new ItemId("preview.unknown"), "Acción futura", RadialDirection.East, new UnknownAction("futureAction", "{\"type\":\"futureAction\"}")),
+                root.Items[5],
+            ]);
+
+        // Cada panel: menú, nivel, sector resaltado y progreso de las permanencias.
+        (RadialMenu Menu, int Depth, RadialDirection? Selection, RadialProgress Progress)[] panels =
+        [
+            (root, 1, RadialDirection.NorthEast, default),
+            (root, 1, RadialDirection.West, new RadialProgress(0.6, 0, false)),
+            (open!, 2, RadialDirection.North, new RadialProgress(0, 0, true)),
+            (unsupported, 1, RadialDirection.East, default),
+            (open!, 2, null, new RadialProgress(0, 0.55, true)),
+        ];
+
         var strip = new Grid
         {
-            Width = RadialTheme.ViewSize * selections.Length,
+            Width = RadialTheme.ViewSize * Panels,
             Height = RadialTheme.ViewSize,
             Background = DesktopLikeBackground(),
         };
 
-        for (var index = 0; index < selections.Length; index++)
+        for (var index = 0; index < panels.Length; index++)
         {
             strip.ColumnDefinitions.Add(new ColumnDefinition());
             var view = new RadialView();
-            view.SetMenu(menu!, configuration.Geometry);
-            view.SetSelection(selections[index]);
+            view.SetMenu(panels[index].Menu, configuration.Geometry, panels[index].Depth);
+            view.SetSelection(panels[index].Selection);
+            view.SetProgress(panels[index].Progress);
             Grid.SetColumn(view, index);
             strip.Children.Add(view);
         }
@@ -59,7 +84,7 @@ internal static class PreviewRenderer
     {
         var visual = new Grid
         {
-            Width = RadialTheme.ViewSize * 3,
+            Width = RadialTheme.ViewSize * Panels,
             Height = RadialTheme.ViewSize,
             Background = new LinearGradientBrush(Color.FromRgb(0xCF, 0xDD, 0xEE), Color.FromRgb(0xE9, 0xD7, 0xC4), 20),
         };

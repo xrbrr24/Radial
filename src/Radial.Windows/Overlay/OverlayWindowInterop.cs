@@ -72,6 +72,30 @@ public static class OverlayWindowInterop
         return new OverlayPlacementResult(dpi, bounds, GetActualBounds(hwnd, bounds));
     }
 
+    /// <summary>
+    /// Mueve una ventana YA visible para que su centro quede en <paramref name="center"/> (píxeles físicos), en UN solo paso con el
+    /// DPI que tenía, para que cambiar de menú no parpadee (<see cref="PlaceCentered"/> pasa antes por una ventana mínima para
+    /// averiguar el monitor). Si al moverla Windows la deja en un monitor con otro DPI, se corrige el tamaño. Sin activar la ventana.
+    /// </summary>
+    public static OverlayPlacementResult RecenterVisible(IntPtr hwnd, ScreenPoint center, double sizeDip, int currentDpi)
+    {
+        RequireHandle(hwnd);
+
+        var dpi = currentDpi > 0 ? currentDpi : OverlayPlacement.BaseDpi;
+        var bounds = OverlayPlacement.Centered(center, sizeDip, dpi);
+        SetBounds(hwnd, bounds);
+
+        var actualDpi = GetDpi(hwnd);
+        if (actualDpi != dpi)
+        {
+            dpi = actualDpi;
+            bounds = OverlayPlacement.Centered(center, sizeDip, dpi);
+            SetBounds(hwnd, bounds);
+        }
+
+        return new OverlayPlacementResult(dpi, bounds, GetActualBounds(hwnd, bounds));
+    }
+
     /// <summary>DPI de la ventana según Windows (<c>GetDpiForWindow</c>); 96 si la llamada falla.</summary>
     public static int GetDpi(IntPtr hwnd)
     {

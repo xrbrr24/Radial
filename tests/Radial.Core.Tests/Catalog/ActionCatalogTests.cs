@@ -57,9 +57,10 @@ public class ActionCatalogTests
     {
         var definition = BuiltInShortcuts.Copy;
 
-        var item = definition.ToItem(RadialDirection.East);
+        var item = definition.ToItem(new ItemId("main.copy-here"), RadialDirection.East);
 
-        Assert.Equal(new ItemId("edit.copy"), item.Id);
+        Assert.Equal(new ItemId("main.copy-here"), item.Id); // la colocación tiene su propio identificador
+        Assert.Equal("edit.copy", item.DefinitionId); // y recuerda de qué definición salió
         Assert.Equal("Copiar", item.Name);
         Assert.Equal(RadialDirection.East, item.Position);
         Assert.Equal(definition.Action, item.Action);
@@ -156,7 +157,7 @@ public class ActionCatalogTests
     public void AMenuBuiltFromTheCatalog_PassesTheConfigurationValidation()
     {
         var root = new MenuId("main");
-        var items = BuiltInShortcuts.All.Select((d, i) => d.ToItem((RadialDirection)i)).ToList();
+        var items = BuiltInShortcuts.All.Select((d, i) => d.ToItem(root, (RadialDirection)i)).ToList();
         var configuration = new RadialConfiguration { RootMenuId = root, Menus = [new RadialMenu(root, "Principal", items)] };
 
         Assert.True(ConfigurationValidator.Validate(configuration).IsValid);

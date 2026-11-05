@@ -47,6 +47,12 @@ public class RadialOverlayCoordinatorTests
             return Scale;
         }
 
+        public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => 1.0;
+
+        public void SetProgress(RadialProgress progress)
+        {
+        }
+
         public void SetSelection(RadialDirection? direction) => Selections.Add(direction);
 
         public void Hide()

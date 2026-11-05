@@ -1,5 +1,8 @@
 ﻿using System.Windows;
 using Radial.App.Overlay;
+using Radial.Core.Model;
+using Radial.Core.Storage;
+using Radial.Windows.Storage;
 
 namespace Radial.App;
 
@@ -39,7 +42,35 @@ public partial class App : Application
             return;
         }
 
-        new MainWindow(ValueOf(e.Args, "--selftest")).Show();
+        var selfTest = ValueOf(e.Args, "--selftest");
+        var (configuration, notices) = selfTest is null ? LoadConfiguration() : (DefaultConfiguration.Create(), []);
+        new MainWindow(configuration, notices, selfTest).Show();
+    }
+
+    /// <summary>
+    /// Carga la configuración de <c>%LOCALAPPDATA%\Radial\config.json</c> (la crea en el primer inicio, recupera una copia si está
+    /// dañada). Un problema de configuración nunca tumba la aplicación: ante cualquier fallo inesperado se usan los valores
+    /// predeterminados en memoria y se avisa en el registro. La autoprueba no toca el disco: usa la predeterminada en memoria.
+    /// </summary>
+    private static (RadialConfiguration Configuration, IReadOnlyList<SettingsNotice> Notices) LoadConfiguration()
+    {
+        try
+        {
+            var store = new FileSettingsStore(FileSettingsStore.DefaultRootDirectory);
+            var result = store.LoadOrCreate();
+            var notices = new List<SettingsNotice>
+            {
+                new(SettingsNoticeSeverity.Info, $"Configuración: {result.Source} ({store.ConfigPath})."),
+            };
+            notices.AddRange(result.Notices);
+            return (result.Configuration, notices);
+        }
+        catch (Exception exception)
+        {
+            return (
+                DefaultConfiguration.Create(),
+                [new SettingsNotice(SettingsNoticeSeverity.Error, $"No se pudo cargar la configuración ({exception.GetType().Name}); se usan los valores predeterminados en memoria.")]);
+        }
     }
 
     private static string? ValueOf(string[] args, string option)

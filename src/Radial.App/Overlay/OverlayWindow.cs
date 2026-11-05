@@ -76,14 +76,10 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
         Prepare();
         _center = center;
 
-        if (!ReferenceEquals(menu, _menu) || !ReferenceEquals(geometry, _geometry))
-        {
-            _menu = menu;
-            _geometry = geometry;
-            _view.SetMenu(menu, geometry);
-        }
-
-        _view.SetSelection(null);
+        // Se redibuja siempre: el menú pudo cambiar de contenido aunque sea el mismo objeto, y empieza sin selección ni progreso.
+        _menu = menu;
+        _geometry = geometry;
+        _view.SetMenu(menu, geometry, depth: 1);
 
         var foregroundBefore = OverlayWindowInterop.GetForegroundWindow();
 
@@ -113,7 +109,34 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
         return OverlayPlacement.Scale(placement.Dpi);
     }
 
+    /// <summary>
+    /// Cambia el menú de la ventana ya visible (entrar en un grupo o volver atrás) y la recoloca centrada en el cursor, sin ocultarla
+    /// ni recrearla: se redibuja el contenido y se mueve en un solo paso (<see cref="OverlayWindowInterop.RecenterVisible"/>).
+    /// </summary>
+    public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center)
+    {
+        if (_geometry is null || _hwnd == IntPtr.Zero || !IsVisible)
+        {
+            throw new InvalidOperationException("No se puede cambiar de menú: el overlay no está visible.");
+        }
+
+        _menu = menu;
+        _center = center;
+        _view.SetMenu(menu, _geometry, depth);
+
+        var dpi = LastPlacement?.Dpi ?? OverlayPlacement.BaseDpi;
+        var placement = OverlayWindowInterop.RecenterVisible(_hwnd, center, RadialTheme.ViewSize, dpi);
+        LastPlacement = placement;
+        Diagnostic?.Invoke(
+            $"menú «{menu.Name}» (nivel {depth}) en ({center.X}, {center.Y}); DPI {placement.Dpi}; " +
+            $"ventana {placement.Actual.Size}x{placement.Actual.Size} px en ({placement.Actual.X}, {placement.Actual.Y})");
+
+        return OverlayPlacement.Scale(placement.Dpi);
+    }
+
     public void SetSelection(RadialDirection? direction) => _view.SetSelection(direction);
+
+    public void SetProgress(RadialProgress progress) => _view.SetProgress(progress);
 
     void IRadialPresenter.Hide()
     {

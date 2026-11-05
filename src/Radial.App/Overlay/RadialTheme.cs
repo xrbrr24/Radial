@@ -26,6 +26,17 @@ internal static class RadialTheme
 
     public const double LabelRadius = 124;
 
+    /// <summary>Grosor del arco de progreso de las permanencias (entrar en un grupo y volver atrás).</summary>
+    public const double ProgressThickness = 4;
+
+    /// <summary>Banda de acento de un grupo: separación del borde exterior, grosor y hueco angular (la hace más corta que el sector).</summary>
+    public const double GroupBandOffset = 4;
+    public const double GroupBandThickness = 4;
+    public const double GroupBandGapDegrees = 18;
+
+    /// <summary>Glifo (Segoe «Warning») de una acción de tipo desconocido, que se conserva pero no se puede usar.</summary>
+    public const string UnsupportedGlyph = "";
+
     public static readonly Brush Backdrop = Freeze(Color.FromArgb(0xD9, 0x12, 0x14, 0x18));
     public static readonly Brush BackdropEdge = Freeze(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
 
@@ -44,6 +55,12 @@ internal static class RadialTheme
     public static readonly Brush Hub = Freeze(Color.FromArgb(0xE6, 0x0F, 0x11, 0x15));
     public static readonly Brush HubEdge = Freeze(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
     public static readonly Brush Pointer = Freeze(Color.FromRgb(0x5B, 0xB8, 0xF0));
+
+    public static readonly Brush IconDim = Freeze(Color.FromRgb(0x6B, 0x73, 0x80));
+    public static readonly Brush HubEdgeArmed = Freeze(Color.FromArgb(0xE6, 0x5B, 0xB8, 0xF0));
+    public static readonly Brush GroupBand = Freeze(Color.FromArgb(0x8C, 0x5B, 0xB8, 0xF0));
+    public static readonly Brush GroupBandSelected = Freeze(Color.FromArgb(0xFF, 0x9A, 0xD8, 0xFF));
+    public static readonly Brush Progress = Freeze(Color.FromRgb(0x9A, 0xD8, 0xFF));
 
     // Segoe Fluent Icons (Windows 11) con Segoe MDL2 Assets de respaldo; texto con la fuente del sistema.
     public static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");

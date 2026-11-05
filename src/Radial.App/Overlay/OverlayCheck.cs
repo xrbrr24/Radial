@@ -1,8 +1,10 @@
 using System.IO;
 using System.Windows;
 using Radial.Core.Geometry;
+using Radial.Core.Model;
 using Radial.Windows.Input;
 using Radial.Windows.Overlay;
+using Radial.Windows.Storage;
 
 namespace Radial.App.Overlay;
 
@@ -21,7 +23,7 @@ internal static class OverlayCheck
         OverlayWindow? overlay = null;
         try
         {
-            var configuration = ProvisionalMenu.Create();
+            var configuration = DefaultConfiguration.Create();
             configuration.TryGetMenu(configuration.RootMenuId, out var menu);
 
             overlay = new OverlayWindow();
@@ -64,9 +66,33 @@ internal static class OverlayCheck
                 lines.Add($"[{(passed ? "OK" : "FALLO")}] {name}: {detail}");
             }
 
+            // Cambio de menú con la ventana ya visible (entrar en un grupo): se recoloca en otro punto sin ocultarla ni cambiar el foco.
+            configuration.TryGetMenu(new MenuId(DefaultConfiguration.OpenMenuName), out var submenu);
+            var moved = new ScreenPoint(cursor.Value.X + 60, cursor.Value.Y + 40);
+            var foregroundBeforeMenu = OverlayWindowInterop.GetForegroundWindow();
+            overlay.ShowMenu(submenu!, 2, moved);
+            overlay.SetProgress(new RadialProgress(0.5, 0, true));
+            await Task.Delay(300);
+            var movedPlacement = overlay.LastPlacement!.Value;
+            var movedX = movedPlacement.Actual.X + movedPlacement.Actual.Size / 2;
+            var movedY = movedPlacement.Actual.Y + movedPlacement.Actual.Size / 2;
+            var menuChecks = new (string Name, bool Passed, string Detail)[]
+            {
+                ("Cambio de menú: sigue visible (no se ocultó)", overlay.IsVisible, overlay.IsVisible.ToString()),
+                ("Cambio de menú: recentrado en el punto nuevo (±1 px)", Math.Abs(movedX - moved.X) <= 1 && Math.Abs(movedY - moved.Y) <= 1, $"punto ({moved.X}, {moved.Y}), centro de la ventana ({movedX}, {movedY})"),
+                ("Cambio de menú: el foco no cambió", OverlayWindowInterop.GetForegroundWindow() == foregroundBeforeMenu, "comparado antes y después"),
+                ("Cambio de menú: la ventana no está activa", !overlay.IsActive, overlay.IsActive.ToString()),
+                ("Cambio de menú: estilos intactos", (OverlayWindowInterop.ReadStyles(overlay.Hwnd).Raw & styles.Raw) == styles.Raw, $"0x{OverlayWindowInterop.ReadStyles(overlay.Hwnd).Raw:X8}"),
+            };
+
+            foreach (var (name, passed, detail) in menuChecks)
+            {
+                lines.Add($"[{(passed ? "OK" : "FALLO")}] {name}: {detail}");
+            }
+
             overlay.Dispatcher.Invoke(() => ((IRadialPresenter)overlay).Hide());
             lines.Add($"Tras ocultar: visible = {overlay.IsVisible}");
-            exitCode = checks.All(c => c.Passed) ? 0 : 2;
+            exitCode = checks.All(c => c.Passed) && menuChecks.All(c => c.Passed) ? 0 : 2;
         }
         catch (Exception exception)
         {

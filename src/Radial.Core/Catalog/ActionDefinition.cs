@@ -75,6 +75,10 @@ public sealed record ActionDefinition(
         {
             problems.Add("Un grupo de menú no es una acción del repertorio: se define en el menú, no aquí.");
         }
+        else if (Action is UnknownAction)
+        {
+            problems.Add("Una acción de tipo desconocido no se puede ejecutar y no puede ser una definición del repertorio.");
+        }
         else
         {
             problems.AddRange(Action.GetProblems());
@@ -83,8 +87,18 @@ public sealed record ActionDefinition(
         return problems;
     }
 
-    /// <summary>El elemento de menú de esta acción en una posición. El identificador del elemento es el de la definición.</summary>
-    public RadialItem ToItem(RadialDirection position) => new(new ItemId(Id), Name, position, Action, Icon);
+    /// <summary>
+    /// Una COLOCACIÓN de esta acción en un menú: el elemento lleva su propio identificador <paramref name="itemId"/> (único en toda
+    /// la configuración) y recuerda de qué definición salió (<see cref="RadialItem.DefinitionId"/>). La misma definición se puede colocar
+    /// en tantos menús y posiciones como se quiera, cada vez con un identificador de elemento distinto.
+    /// </summary>
+    public RadialItem ToItem(ItemId itemId, RadialDirection position) => new(itemId, Name, position, Action, Icon, Id);
+
+    /// <summary>
+    /// Colocación con identificador derivado: <c>{menú}.{definición}</c>. Es único mientras la definición se coloque una sola vez en
+    /// ese menú (lo habitual); si se coloca dos veces en el mismo menú hay que dar el identificador con la otra sobrecarga.
+    /// </summary>
+    public RadialItem ToItem(MenuId menuId, RadialDirection position) => ToItem(new ItemId($"{menuId.Value}.{Id}"), position);
 
     private static bool IsIdCharacter(char c) => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-';
 }

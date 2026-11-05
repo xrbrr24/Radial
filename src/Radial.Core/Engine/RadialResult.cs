@@ -26,6 +26,9 @@ public enum CancelReason
 
     /// <summary>Se soltó sobre un grupo antes de completar el tiempo de entrada.</summary>
     GroupNotEntered,
+
+    /// <summary>El elemento es de un tipo de acción desconocido (<see cref="Radial.Core.Model.UnknownAction"/>): no se ejecuta.</summary>
+    UnsupportedAction,
 }
 
 /// <summary>Resultado de <see cref="RadialEngine.Confirm"/>. El motor nunca ejecuta acciones: solo las indica.</summary>

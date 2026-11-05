@@ -4,9 +4,11 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Radial.App.Diagnostics;
 using Radial.App.Overlay;
+using Radial.App.Tray;
 using Radial.Core.Engine;
 using Radial.Core.Execution;
 using Radial.Core.Model;
+using Radial.Core.Storage;
 using Radial.Core.Timing;
 using Radial.Windows.Input;
 using Radial.Windows.Overlay;
@@ -36,10 +38,15 @@ public partial class MainWindow : Window
     private Task? _readerTask;
     private readonly GestureReaderSupervisor _supervisor;
     private GestureReaderEnd? _readerEnd => _supervisor.End;
+    private readonly TrayIcon? _tray;
+    private bool _exiting;
+    private bool _hiddenHintShown;
     private string? _readerLastFailure;
 
+    /// <param name="configuration">La configuración cargada (o la predeterminada): de ella sale el menú del radial.</param>
+    /// <param name="loadNotices">Avisos de la carga de la configuración, que se muestran en el registro.</param>
     /// <param name="selfTestOutput">Si se indica, al cargar la ventana se ejecuta la autoprueba, se escribe el resultado en ese archivo y se cierra.</param>
-    public MainWindow(string? selfTestOutput = null)
+    public MainWindow(RadialConfiguration configuration, IReadOnlyList<SettingsNotice> loadNotices, string? selfTestOutput = null)
     {
         _selfTestOutput = selfTestOutput;
         InitializeComponent();
@@ -52,13 +59,14 @@ public partial class MainWindow : Window
         // lo aísla (y sin supervisión nace aislado: no debe aparecer nada antes de que ella termine).
         _overlay.Prepare();
         _overlay.Diagnostic += line => AppendLine("[overlay] " + line);
-        _coordinator = new RadialOverlayCoordinator(ProvisionalMenu.Create(), new MonotonicClock(), _overlay, () => _service.LatestPointer, executor: ActionExecutors.Create());
+        _coordinator = new RadialOverlayCoordinator(configuration, new MonotonicClock(), _overlay, () => _service.LatestPointer, executor: ActionExecutors.Create());
         _coordinator.Completed += result => AppendLine(
             result.Kind == RadialResultKind.Execute
                 ? $"[radial] confirmado: «{result.Item!.Name}»"
                 : $"[radial] confirmado sin selección ({result.Reason})");
         _coordinator.Aborted += cause => AppendLine($"[radial] cancelado ({cause})");
-        _coordinator.UnsupportedNavigation += target => AppendLine($"[radial] cancelado: el menú «{target.Value}» no se puede mostrar todavía (submenús pendientes de integrar en el overlay); no se ejecutó nada");
+        _coordinator.MenuChanged += (menu, depth) => AppendLine($"[radial] menú «{menu.Name}» (nivel {depth})");
+        _coordinator.UnsupportedNavigation += target => AppendLine($"[radial] cancelado: la pila de menús del motor («{target.Value}») no coincide con la mostrada; no se ejecutó nada");
         _coordinator.ActionFinished += OnActionFinished;
         _coordinator.SubscriberFailed += (eventName, exception) => AppendLine($"[radial] ERROR en un suscriptor de {eventName}: {exception.GetType().Name}: {exception.Message}");
         _reader = new GestureEventReader(_service.Events, ProcessGesture, OnReaderFailure);
@@ -103,12 +111,31 @@ public partial class MainWindow : Window
         _refresh.Tick += (_, _) => RefreshState();
         _refresh.Start();
         Closing += OnWindowClosing;
+
+        // Bandeja del sistema (solo en uso normal): mostrar la ventana de diagnóstico y salir. Al cerrar la sesión de Windows se
+        // permite cerrar de verdad: una ventana que se niega a cerrarse bloquearía el apagado.
+        if (selfTestOutput is null)
+        {
+            _tray = new TrayIcon(ShowFromTray, RequestExit);
+            Application.Current.SessionEnding += (_, _) => _exiting = true;
+        }
+
+        foreach (var notice in loadNotices)
+        {
+            AppendLine($"[config] {notice.Severity}: {notice.Message}");
+        }
+
         Loaded += async (_, _) =>
         {
             _readerTask = SuperviseReaderAsync();
             if (_selfTestOutput is not null)
             {
                 await RunUnattendedSelfTestAsync(_selfTestOutput);
+            }
+            else
+            {
+                // La configuración ya está cargada y el lector en marcha: la captura empieza sola.
+                StartCapture();
             }
         };
         RefreshState();
@@ -382,7 +409,9 @@ public partial class MainWindow : Window
         EventsBox.ScrollToEnd();
     }
 
-    private void OnStart(object sender, RoutedEventArgs e)
+    private void OnStart(object sender, RoutedEventArgs e) => StartCapture();
+
+    private void StartCapture()
     {
         if (_supervisor.Failure is not null)
         {
@@ -483,6 +512,24 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+    }
+
+    /// <summary>Cierra Radial de verdad (la opción «Salir» de la bandeja). Si hay una autoprueba en curso, se cancela y el cierre se completa al terminar.</summary>
+    private void RequestExit()
+    {
+        _exiting = true;
+        Close();
+    }
+
     private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         // Cerrar durante la autoprueba: se aplaza el cierre, se cancela la prueba y su bloque final libera lo pulsado.
@@ -492,6 +539,20 @@ public partial class MainWindow : Window
             e.Cancel = true;
             _closeRequestedDuringSelfTest = true;
             _selfTestCancel?.Cancel();
+            return;
+        }
+
+        // Con la bandeja, la X de la ventana la oculta: Radial sigue en segundo plano y se cierra con «Salir» del icono.
+        if (!_exiting && _tray is not null)
+        {
+            e.Cancel = true;
+            Hide();
+            if (!_hiddenHintShown)
+            {
+                _hiddenHintShown = true;
+                AppendLine("Radial sigue en la bandeja del sistema. Para cerrarlo del todo, usa «Salir de Radial» en el menú del icono.");
+            }
+
             return;
         }
 
@@ -516,7 +577,14 @@ public partial class MainWindow : Window
             }
             finally
             {
-                _overlay.Close();
+                try
+                {
+                    _tray?.Dispose();
+                }
+                finally
+                {
+                    _overlay.Close();
+                }
             }
         }
     }

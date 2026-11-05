@@ -26,6 +26,12 @@ public class RadialOverlayCoordinatorActionTests
             return 1.0;
         }
 
+        public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => 1.0;
+
+        public void SetProgress(RadialProgress progress)
+        {
+        }
+
         public void SetSelection(RadialDirection? direction)
         {
         }

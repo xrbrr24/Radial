@@ -130,8 +130,18 @@ public static class ConfigurationValidator
                     $"La posición {item.Position} ya está ocupada por otro elemento de este menú.");
             }
 
+            ValidateDefinitionId(item.DefinitionId, $"{path}.definitionId", issues);
             ValidateIcon(item.Icon, $"{path}.icon", issues);
             ValidateAction(knownMenus, item.Action, $"{path}.action", issues);
+        }
+    }
+
+    private static void ValidateDefinitionId(string? definitionId, string path, List<ValidationIssue> issues)
+    {
+        if (definitionId is not null && (string.IsNullOrWhiteSpace(definitionId) || definitionId.Length > ConfigurationLimits.MaxIdLength))
+        {
+            Error(issues, ValidationCodes.ItemDefinitionIdInvalid, path,
+                $"El identificador de la definición no puede estar vacío ni superar los {ConfigurationLimits.MaxIdLength} caracteres.");
         }
     }
 
@@ -154,6 +164,22 @@ public static class ConfigurationValidator
         if (action is null)
         {
             Error(issues, ValidationCodes.ActionMissing, path, "El elemento no tiene acción.");
+            return;
+        }
+
+        if (action is UnknownAction unknown)
+        {
+            // Se conserva tal cual y no se ejecuta: es un aviso, no un error (documento técnico, 7.1).
+            if (string.IsNullOrWhiteSpace(unknown.Type))
+            {
+                Error(issues, ValidationCodes.ActionInvalid, path, "El tipo de la acción desconocida es obligatorio.");
+            }
+            else
+            {
+                issues.Add(new ValidationIssue(ValidationSeverity.Warning, ValidationCodes.ActionUnknownType,
+                    "Esta acción es de un tipo que esta versión de Radial no conoce: se conserva en la configuración, pero no se puede ejecutar.", path));
+            }
+
             return;
         }
 

@@ -21,6 +21,11 @@ public static class ValidationCodes
     public const string ActionInvalid = "action.invalid";
     public const string ActionMenuMissing = "action.menu-missing";
 
+    /// <summary>Aviso: el tipo de acción es desconocido para esta versión; se conserva pero no se ejecuta.</summary>
+    public const string ActionUnknownType = "action.unknown-type";
+
+    public const string ItemDefinitionIdInvalid = "item.definition-id-invalid";
+
     public const string MenuCycle = "menu.cycle";
     public const string MenuTooDeep = "menu.too-deep";
     public const string MenuUnreachable = "menu.unreachable";
