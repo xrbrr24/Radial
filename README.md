@@ -4,7 +4,7 @@ Launcher personalizable basado en menús radiales para Windows 11.
 
 Mantén **Ctrl**, pulsa el **botón central** del ratón, mueve el cursor hacia un sector y suelta el botón para ejecutar una acción. Un sector puede ser un **grupo**: permanece sobre él y se abre su submenú, recentrado donde está el cursor; sal del centro y vuelve a él para retroceder. Esc o soltar Ctrl antes de confirmar cancela.
 
-> **Estado:** en desarrollo. Fases 0 a 3 completadas. **Fase 4 (overlay y acciones): implementada y validada automáticamente en CI; su validación manual completa sigue pendiente y NO está aprobada.** **Fase 5 (submenús, configuración persistente, bandeja): implementada; sus pruebas están pendientes de confirmación en CI y su validación manual no se ha hecho.** El detalle de qué está confirmado y qué no está en [docs/technical-design.md](docs/technical-design.md) (15.5, 17.11 y sección 18). Todavía no hay editor visual, ajustes, temas, autoarranque, importar/exportar ni instalador.
+> **Estado:** en desarrollo. Fases 0 a 3 completadas. **Fase 4 (overlay y acciones): implementada y validada automáticamente en CI; su validación manual completa sigue pendiente y NO está aprobada.** **Fase 5 (submenús, configuración persistente, bandeja): implementada; compilación y pruebas automáticas en verde en CI (commit `1772b59`); su validación manual no se ha hecho.** El detalle de qué está confirmado y qué no está en [docs/technical-design.md](docs/technical-design.md) (15.5, 17.11 y sección 18). Todavía no hay editor visual, ajustes, temas, autoarranque, importar/exportar ni instalador.
 
 ## Qué hace hoy la aplicación
 
