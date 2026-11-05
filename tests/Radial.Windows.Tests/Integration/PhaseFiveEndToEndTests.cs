@@ -4,6 +4,7 @@ using Radial.Core.Geometry;
 using Radial.Core.Model;
 using Radial.Core.Storage;
 using Radial.Windows.Actions;
+using Radial.Windows.Input;
 using Radial.Windows.Overlay;
 using Radial.Windows.Storage;
 using Radial.Windows.Tests.Actions;
