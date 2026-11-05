@@ -1,0 +1,46 @@
+<UserControl x:Class="Radial.App.Views.DiagnosticsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="OnLoaded" Unloaded="OnUnloaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,12,0">
+        <StackPanel MaxWidth="980" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource Text.Title}" Text="Diagnóstico de la captura global" />
+            <TextBlock Style="{StaticResource Text.Secondary}" TextWrapping="Wrap" Margin="0,6,0,16"
+                       Text="Estado de los hooks, del gesto y del radial. Es una herramienta para comprobar que la captura funciona; la configuración habitual está en las otras secciones." />
+
+            <WrapPanel Margin="0,0,0,12">
+                <Button x:Name="StartButton" Content="Iniciar captura" Style="{StaticResource Button.Primary}" Margin="0,0,8,8" Click="OnStart" />
+                <Button x:Name="StopButton" Content="Detener captura" Margin="0,0,8,8" Click="OnStop" />
+                <Button Content="Consultar estado" Margin="0,0,8,8" Click="OnQuery" />
+                <Button x:Name="CancelButton" Content="Probar cancelación" Margin="0,0,8,8" Click="OnCancel" />
+                <Button x:Name="SelfTestButton" Content="Autoprueba (entrada sintética)" Margin="0,0,8,8" Click="OnSelfTest" />
+            </WrapPanel>
+
+            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,12">
+                <TextBlock Style="{StaticResource Text.Secondary}" TextWrapping="Wrap"
+                           Text="Gesto: mantén Ctrl, pulsa el botón central, mueve y suelta el botón central. Con la captura en marcha, el radial aparece sobre el cursor mientras dura el gesto y, al soltar el botón central, ejecuta la acción elegida (los atajos esperan a que sueltes Ctrl, Mayús, Alt y Win; hasta 5 s). Hazlo con otra aplicación en primer plano: el teclado va a la ventana activa. Los eventos inyectados se ignoran; durante la autoprueba solo se aceptan los que lleva la marca de Radial y el radial permanece aislado, sin ejecutar nada." />
+            </Border>
+
+            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,12">
+                <Grid x:Name="StateGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                </Grid>
+            </Border>
+
+            <Border x:Name="TestZone" Style="{StaticResource Card}" Height="64" Margin="0,0,0,12" Background="{DynamicResource Brush.AccentSubtle}">
+                <TextBlock Text="Zona de prueba: los clics centrales y Escape que llegan a la aplicación se cuentan aquí" Style="{StaticResource Text.Secondary}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+
+            <TextBlock Style="{StaticResource Text.Section}" Text="EVENTOS" Margin="0,0,0,6" />
+            <TextBox x:Name="EventsBox" IsReadOnly="True" FontFamily="{StaticResource Font.Mono}" FontSize="11.5" Height="240"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Margin="0,0,0,12" VerticalContentAlignment="Top" />
+            <TextBlock Style="{StaticResource Text.Section}" Text="ERRORES Y AVISOS" Margin="0,0,0,6" />
+            <TextBox x:Name="MessagesBox" IsReadOnly="True" FontFamily="{StaticResource Font.Mono}" FontSize="11.5" Height="110"
+                     VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" VerticalContentAlignment="Top" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

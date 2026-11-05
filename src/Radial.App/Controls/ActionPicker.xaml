@@ -1,0 +1,41 @@
+<UserControl x:Class="Radial.App.Controls.ActionPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:t="clr-namespace:Radial.App.Theme"
+             xmlns:c="clr-namespace:Radial.App.Controls">
+    <!-- Selector de acciones de la biblioteca para el sector elegido: búsqueda y lista; se puede arrastrar al radial o pulsar. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBox Text="{Binding PickerSearch, UpdateSourceTrigger=PropertyChanged}" t:Attached.Hint="Busca una acción de la biblioteca…" Margin="0,0,0,8" />
+        <ListBox Grid.Row="1" x:Name="List" ItemsSource="{Binding PickerResults}" Style="{StaticResource ListBox.Flat}"
+                 PreviewMouseLeftButtonDown="OnRowMouseDown" PreviewMouseMove="OnRowMouseMove" MouseDoubleClick="OnRowDoubleClick">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="8,6" Background="{DynamicResource Brush.Transparent}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius.S}" Background="{DynamicResource Brush.Surface3}">
+                            <c:GlyphIcon Glyph="{Binding IconName}" FontSize="14" Foreground="{DynamicResource Brush.Accent}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="10,0,6,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Border Grid.Column="2" Style="{StaticResource Badge}" VerticalAlignment="Center"
+                                Visibility="{Binding IsPlaced, Converter={StaticResource VisibleWhenTrue}}" ToolTip="{Binding PlacedText}">
+                            <TextBlock Text="{Binding Placements}" Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.Accent}" />
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="1" Text="Ninguna acción coincide." Style="{StaticResource Text.Secondary}" HorizontalAlignment="Center" Margin="0,24,0,0"
+                   VerticalAlignment="Top" Visibility="{Binding PickerResults.Count, Converter={StaticResource VisibleWhenZero}}" />
+    </Grid>
+</UserControl>

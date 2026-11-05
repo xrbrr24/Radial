@@ -1,0 +1,47 @@
+<UserControl x:Class="Radial.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Radial.App.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,12,0">
+        <StackPanel MaxWidth="680" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource Text.Title}" Text="Ajustes" />
+            <TextBlock Style="{StaticResource Text.Secondary}" TextWrapping="Wrap" Margin="0,6,0,20"
+                       Text="Cómo se comporta el radial al moverte entre grupos y submenús. Los cambios se guardan y se aplican al radial cuando pulsas Guardar." />
+
+            <Border Style="{StaticResource Card}" Padding="22,20">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Heading}" Text="Submenús" />
+
+                    <Grid Margin="0,18,0,0">
+                        <TextBlock Text="Tiempo para entrar en un grupo" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding SubmenuDwellText}" HorizontalAlignment="Right" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,6"
+                               Text="Cuánto tiempo debes mantener el cursor sobre un grupo para que se abra su submenú. Menos es más rápido, más evita aperturas sin querer." />
+                    <Slider Minimum="{Binding MinDwellMs}" Maximum="{Binding MaxDwellMs}" Value="{Binding SubmenuDwellMs, Mode=TwoWay}" SmallChange="50" LargeChange="100" TickFrequency="50" IsSnapToTickEnabled="True" />
+
+                    <Grid Margin="0,22,0,0">
+                        <TextBlock Text="Tiempo para volver atrás" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding BackDwellText}" HorizontalAlignment="Right" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,6"
+                               Text="Cuánto tiempo debes mantener el cursor en el centro, dentro de un submenú, para volver al menú anterior." />
+                    <Slider Minimum="{Binding MinDwellMs}" Maximum="{Binding MaxDwellMs}" Value="{Binding BackDwellMs, Mode=TwoWay}" SmallChange="50" LargeChange="100" TickFrequency="50" IsSnapToTickEnabled="True" />
+
+                    <Grid Margin="0,22,0,0">
+                        <TextBlock Text="Profundidad máxima" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding MaxDepthText}" HorizontalAlignment="Right" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,6"
+                               Text="Cuántos menús pueden apilarse, contando el principal. No se puede bajar por debajo de la profundidad que ya usan tus grupos." />
+                    <Slider Minimum="1" Maximum="{Binding MaxDepthLimit}" Value="{Binding MaxDepth, Mode=TwoWay}" SmallChange="1" LargeChange="1" TickFrequency="1" IsSnapToTickEnabled="True" />
+
+                    <TextBlock Text="{Binding Message}" Foreground="{DynamicResource Brush.Danger}" TextWrapping="Wrap" Margin="0,16,0,0"
+                               Visibility="{Binding Message.Length, Converter={StaticResource VisibleWhenNotZero}}" />
+                </StackPanel>
+            </Border>
+
+            <Button Content="Restaurar valores predeterminados" Command="{Binding RestoreDefaults}" HorizontalAlignment="Left" Margin="0,16,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

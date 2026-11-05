@@ -240,7 +240,7 @@ internal sealed class RadialView : UserControl
         return hub;
     }
 
-    private static StreamGeometry CreateGeometry(SectorShape shape)
+    internal static StreamGeometry CreateGeometry(SectorShape shape)
     {
         var geometry = new StreamGeometry();
         using (var context = geometry.Open())
