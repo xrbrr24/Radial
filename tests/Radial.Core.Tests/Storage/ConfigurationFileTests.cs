@@ -185,7 +185,7 @@ public class ConfigurationFileTests
         Assert.Contains("\"label\": \"Mi documento\"", json);
         Assert.Contains("\"type\": \"sendKeys\"", json);
         Assert.Contains("\"submenuDwellMs\": 450", json);
-        Assert.DoesNotContain("null", json.Replace("\"deep\": null", string.Empty)); // sin nulos: lo que falta no se escribe
+        Assert.DoesNotContain("null", json.Replace("\"deep\": null", string.Empty).Replace("\"y\": null", string.Empty)); // sin nulos propios: lo que falta no se escribe (los de las acciones desconocidas se conservan tal cual)
         Assert.EndsWith("\n", json);
     }
 

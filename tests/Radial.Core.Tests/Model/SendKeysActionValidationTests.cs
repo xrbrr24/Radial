@@ -74,7 +74,8 @@ public class SendKeysActionValidationTests
         var problems = Action(new string('A', 100_000)).GetProblems().ToList();
 
         Assert.Single(problems);
-        Assert.True(problems[0].Length < 500, "El mensaje no debe repetir el texto recibido.");
+        // El mensaje lista el vocabulario (largo) pero no repite el texto recibido, que mide 100 000 caracteres.
+        Assert.True(problems[0].Length < KeyVocabulary.Description.Length + 300, "El mensaje no debe repetir el texto recibido.");
     }
 
     [Fact]
