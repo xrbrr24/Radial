@@ -154,7 +154,8 @@ public class RadialOverlayCoordinatorNavigationTests
         Assert.True(h.Presenter.Visible);
 
         // «show» una sola vez y «menu:» entre medias, sin ningún «hide».
-        Assert.Equal(1, h.Presenter.Log.Count(entry => entry == "show"));
+        var shows = h.Presenter.Log.Where(entry => entry == "show").ToList();
+        Assert.Single(shows);
         Assert.DoesNotContain("hide", h.Presenter.Log);
         Assert.Contains("menu:Menú A", h.Presenter.Log);
     }

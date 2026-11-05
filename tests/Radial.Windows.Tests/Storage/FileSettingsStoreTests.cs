@@ -90,7 +90,7 @@ public class FileSettingsStoreTests : IDisposable
 
         Assert.Equal(SettingsSource.Loaded, result.Source);
         Assert.Equal("Mi menú", result.Configuration.Menus[0].Name);
-        Assert.Empty(result.Notices.Where(n => n.Severity != SettingsNoticeSeverity.Info));
+        Assert.DoesNotContain(result.Notices, n => n.Severity != SettingsNoticeSeverity.Info);
     }
 
     [Fact]
