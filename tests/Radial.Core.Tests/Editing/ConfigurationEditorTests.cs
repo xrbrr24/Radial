@@ -199,7 +199,7 @@ public class ConfigurationEditorTests
 
         Assert.True(result.Success);
         Assert.DoesNotContain(editor.Current.Actions, a => a.Id == "edit.copy");
-        Assert.Empty(editor.Current.Menus.SelectMany(m => m.Items).Where(i => i.DefinitionId == "edit.copy"));
+        Assert.DoesNotContain(editor.Current.Menus.SelectMany(m => m.Items), i => i.DefinitionId == "edit.copy");
         Assert.Single(editor.Current.Menus[0].Items, i => i.IsGroup); // los grupos no se tocan
         AssertValid(editor);
     }

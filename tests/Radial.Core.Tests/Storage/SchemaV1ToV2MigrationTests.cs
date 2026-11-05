@@ -251,7 +251,7 @@ public class SchemaV1ToV2MigrationTests
         Assert.Equal("edit.copy", item["actionId"]!.GetValue<string>());
         Assert.Null(item["action"]);
         Assert.Null(item["name"]); // el nombre es el de la definición
-        Assert.Equal(1, root["actions"]!.AsArray().Count);
+        Assert.Single(root["actions"]!.AsArray());
     }
 
     [Fact]
