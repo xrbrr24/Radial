@@ -1,4 +1,5 @@
 using Radial.Core.Catalog;
+using Radial.Core.Editing;
 using Radial.Core.Geometry;
 using Radial.Core.Model;
 using Radial.Windows.Presentation;

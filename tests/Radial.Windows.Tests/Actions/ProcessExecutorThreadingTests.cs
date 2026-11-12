@@ -35,10 +35,11 @@ public class ProcessExecutorThreadingTests
         var executor = new BlockingFolderExecutor(launcher, gate);
 
         // Si la comprobación se hiciera en el hilo de quien llama, ExecuteAsync no volvería hasta abrir la puerta.
-        var call = Task.Run(() => executor.ExecuteAsync(new OpenFolderAction(@"C:\Datos")));
+        // Se envuelve en object para que Task.Run no desenvuelva la tarea: interesa recibir la tarea pendiente, no su resultado.
+        var call = Task.Run(() => (object)executor.ExecuteAsync(new OpenFolderAction(@"C:\Datos")));
         var first = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(10)));
         Assert.True(ReferenceEquals(call, first), "ExecuteAsync bloqueó a quien llama mientras comprobaba el disco.");
-        var pending = await call;
+        var pending = (Task<ActionExecutionResult>)await call;
         Assert.False(pending.IsCompleted);
 
         gate.Set();
