@@ -67,6 +67,7 @@ public static class ConfigurationFile
 
         // Toda acción conocida de un menú queda enlazada a la biblioteca: la acción se guarda una sola vez.
         configuration = LibraryResolver.Normalize(configuration);
+        var library = IndexLibrary(configuration);
 
         var dto = new ConfigFileDto
         {
@@ -84,19 +85,23 @@ public static class ConfigurationFile
                 MaxDepth = configuration.Navigation.MaxDepth,
             },
             Actions = [.. configuration.Actions.Select(ToDto)],
-            Menus = [.. configuration.Menus.Select(ToDto)],
+            Menus = [.. configuration.Menus.Select(menu => ToDto(menu, library))],
         };
 
         return JsonSerializer.Serialize(dto, ConfigurationJsonContext.Default.ConfigFileDto) + "\n";
     }
 
-    public static ConfigurationParseResult Parse(string json, ConfigurationMigrator? migrator = null)
+    /// <param name="salvageInvalidActions">
+    /// Carga tolerante (la usa el almacén en disco): una acción de tipo conocido que no es válida por sí misma se neutraliza (se conserva
+    /// su JSON y no se ejecuta, con un aviso) en lugar de invalidar toda la configuración. Por defecto, estricto: lo que valida el editor.
+    /// </param>
+    public static ConfigurationParseResult Parse(string json, ConfigurationMigrator? migrator = null, bool salvageInvalidActions = false)
     {
         ArgumentNullException.ThrowIfNull(json);
-        return Parse(Encoding.UTF8.GetBytes(json), migrator);
+        return Parse(Encoding.UTF8.GetBytes(json), migrator, salvageInvalidActions);
     }
 
-    public static ConfigurationParseResult Parse(ReadOnlySpan<byte> utf8Json, ConfigurationMigrator? migrator = null)
+    public static ConfigurationParseResult Parse(ReadOnlySpan<byte> utf8Json, ConfigurationMigrator? migrator = null, bool salvageInvalidActions = false)
     {
         migrator ??= ConfigurationMigrator.Default;
 
@@ -181,7 +186,7 @@ public static class ConfigurationFile
         }
 
         var issues = new List<ValidationIssue>(notes);
-        var configuration = ToModel(dto, issues);
+        var configuration = ToModel(dto, issues, salvageInvalidActions);
         if (configuration is null)
         {
             return new ConfigurationParseResult(ConfigurationParseStatus.Invalid, null, issues, version);
@@ -199,11 +204,11 @@ public static class ConfigurationFile
 
     // Modelo -> DTO
 
-    private static MenuDto ToDto(RadialMenu menu) => new()
+    private static MenuDto ToDto(RadialMenu menu, Dictionary<string, ActionDefinition> library) => new()
     {
         Id = menu.Id.Value,
         Name = menu.Name,
-        Items = [.. menu.Items.Select(ToDto)],
+        Items = [.. menu.Items.Select(item => ToDto(item, library))],
     };
 
     private static ActionDefDto ToDto(ActionDefinition definition) => new()
@@ -221,10 +226,37 @@ public static class ConfigurationFile
     private static IconDto? ToDto(IconReference? icon) =>
         icon is null ? null : new IconDto { Source = icon.Source == IconSource.File ? "file" : "glyph", Value = icon.Value };
 
-    private static ItemDto ToDto(RadialItem item)
+    private static Dictionary<string, ActionDefinition> IndexLibrary(RadialConfiguration configuration)
+    {
+        var index = new Dictionary<string, ActionDefinition>(StringComparer.Ordinal);
+        foreach (var definition in configuration.Actions)
+        {
+            index.TryAdd(definition.Id, definition); // con ids repetidos manda el primero, como al leer
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Una colocación se guarda como referencia a la biblioteca (<c>actionId</c> + ajustes propios) cuando no es un grupo y, si su acción es
+    /// de tipo desconocido o está neutralizada, SOLO si la definición de la biblioteca tiene esa misma acción. Así una acción inerte no
+    /// pierde su identidad ni su vínculo al guardar (el JSON vive una sola vez, en la biblioteca), y borrar la definición sigue
+    /// llevándose sus colocaciones. Una colocación de tipo desconocido con otra acción distinta se queda en línea, como siempre.
+    /// </summary>
+    private static bool IsLinked(RadialItem item, Dictionary<string, ActionDefinition> library)
+    {
+        if (item.DefinitionId is null || item.IsGroup)
+        {
+            return false;
+        }
+
+        return !item.IsUnsupported || (library.TryGetValue(item.DefinitionId, out var definition) && definition.Action.Equals(item.Action));
+    }
+
+    private static ItemDto ToDto(RadialItem item, Dictionary<string, ActionDefinition> library)
     {
         // Colocación enlazada: solo la referencia y los ajustes propios; la acción vive en la biblioteca.
-        if (item.DefinitionId is not null && !item.IsGroup && !item.IsUnsupported)
+        if (IsLinked(item, library))
         {
             return new ItemDto
             {
@@ -236,7 +268,7 @@ public static class ConfigurationFile
             };
         }
 
-        // Grupo o acción de tipo desconocido: la acción va en el propio elemento.
+        // Grupo, o acción de tipo desconocido que no es la de su definición: la acción va en el propio elemento.
         return new ItemDto
         {
             Id = item.Id.Value,
@@ -249,7 +281,7 @@ public static class ConfigurationFile
 
     // DTO -> modelo. Devuelve null si hubo errores de lectura (están en issues).
 
-    private static RadialConfiguration? ToModel(ConfigFileDto dto, List<ValidationIssue> issues)
+    private static RadialConfiguration? ToModel(ConfigFileDto dto, List<ValidationIssue> issues, bool salvage)
     {
         var errorsBefore = issues.Count;
         var geometry = new GeometrySettings();
@@ -277,7 +309,7 @@ public static class ConfigurationFile
         var libraryById = new Dictionary<string, ActionDefinition>(StringComparer.Ordinal);
         for (var index = 0; index < (dto.Actions?.Count ?? 0); index++)
         {
-            var definition = ToDefinition(dto.Actions![index], $"actions[{index}]", issues);
+            var definition = ToDefinition(dto.Actions![index], $"actions[{index}]", issues, salvage);
             if (definition is not null)
             {
                 library.Add(definition);
@@ -299,7 +331,7 @@ public static class ConfigurationFile
             var items = new List<RadialItem>();
             for (var itemIndex = 0; itemIndex < (menuDto.Items?.Count ?? 0); itemIndex++)
             {
-                var item = ToItem(menuDto.Items![itemIndex], $"menus[{menuLabel}].items[{itemIndex}]", libraryById, issues);
+                var item = ToItem(menuDto.Items![itemIndex], $"menus[{menuLabel}].items[{itemIndex}]", libraryById, issues, salvage);
                 if (item is not null)
                 {
                     items.Add(item);
@@ -309,7 +341,7 @@ public static class ConfigurationFile
             menus.Add(new RadialMenu(new MenuId(menuDto.Id ?? string.Empty), menuDto.Name ?? string.Empty, items));
         }
 
-        return issues.Count > errorsBefore
+        return HasErrorsSince(issues, errorsBefore)
             ? null
             : new RadialConfiguration
             {
@@ -321,7 +353,7 @@ public static class ConfigurationFile
             };
     }
 
-    private static ActionDefinition? ToDefinition(ActionDefDto? dto, string path, List<ValidationIssue> issues)
+    private static ActionDefinition? ToDefinition(ActionDefDto? dto, string path, List<ValidationIssue> issues, bool salvage)
     {
         if (dto is null)
         {
@@ -348,10 +380,10 @@ public static class ConfigurationFile
         }
         else
         {
-            action = ActionJson.FromJson(dto.Action, $"{path}.action", issues);
+            action = ActionJson.FromJson(dto.Action, $"{path}.action", issues, salvage);
         }
 
-        return issues.Count > before || action is null || icon is null
+        return HasErrorsSince(issues, before) || action is null || icon is null
             ? null
             : new ActionDefinition(
                 dto.Id ?? string.Empty,
@@ -387,7 +419,7 @@ public static class ConfigurationFile
         return new IconReference(source.Value, iconDto.Value ?? string.Empty);
     }
 
-    private static RadialItem? ToItem(ItemDto? dto, string path, Dictionary<string, ActionDefinition> library, List<ValidationIssue> issues)
+    private static RadialItem? ToItem(ItemDto? dto, string path, Dictionary<string, ActionDefinition> library, List<ValidationIssue> issues, bool salvage)
     {
         if (dto is null)
         {
@@ -426,7 +458,7 @@ public static class ConfigurationFile
                 return null;
             }
 
-            if (issues.Count > before)
+            if (HasErrorsSince(issues, before))
             {
                 return null;
             }
@@ -446,10 +478,10 @@ public static class ConfigurationFile
         }
         else
         {
-            action = ActionJson.FromJson(dto.Action, $"{path}.action", issues);
+            action = ActionJson.FromJson(dto.Action, $"{path}.action", issues, salvage);
         }
 
-        return issues.Count > before || action is null
+        return HasErrorsSince(issues, before) || action is null
             ? null
             : new RadialItem(new ItemId(dto.Id ?? string.Empty), dto.Name ?? string.Empty, position, action, icon, dto.DefinitionId);
     }
@@ -483,6 +515,20 @@ public static class ConfigurationFile
         }
 
         return TimeSpan.FromMilliseconds(milliseconds.Value);
+    }
+
+    // Los avisos (migración, acciones neutralizadas) no son errores de lectura: solo estos descartan el elemento.
+    private static bool HasErrorsSince(List<ValidationIssue> issues, int start)
+    {
+        for (var index = start; index < issues.Count; index++)
+        {
+            if (issues[index].Severity == ValidationSeverity.Error)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ValidationIssue FieldError(string path, string message) =>

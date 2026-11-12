@@ -182,6 +182,12 @@ public sealed class EditorViewModel : ObservableObject
     /// <summary>Hay que redibujar el radial de la vista previa (cambió el menú, un sector, la geometría o la selección).</summary>
     public event Action? PreviewInvalidated;
 
+    /// <summary>
+    /// Cambió <see cref="HasPendingEdits"/>: se ha escrito un nombre que todavía no se ha confirmado, o se ha confirmado o descartado.
+    /// El centro de control lo usa para que el estado de guardado y el botón Guardar lo reflejen sin esperar a que el cuadro pierda el foco.
+    /// </summary>
+    public event Action? PendingChanged;
+
     public RelayCommand Up { get; }
 
     public RelayCommand Enter { get; }
@@ -270,8 +276,29 @@ public sealed class EditorViewModel : ObservableObject
     public string LabelText
     {
         get => _labelText;
-        set => Set(ref _labelText, value);
+        set
+        {
+            if (Set(ref _labelText, value ?? string.Empty))
+            {
+                Raise(nameof(HasPendingEdits));
+                PendingChanged?.Invoke();
+            }
+        }
     }
+
+    /// <summary>
+    /// Hay un nombre escrito en el inspector que todavía no está en la configuración (no se ha confirmado con Enter ni al perder el
+    /// foco). Cuenta como cambio sin guardar: guardar o cerrar lo confirman antes (<see cref="CommitPending"/>). El texto idéntico al nombre
+    /// actual nunca es una edición, aunque ese nombre tenga espacios al principio o al final (la validación no los recorta).
+    /// </summary>
+    public bool HasPendingEdits => SelectedItem is { } item && _labelText != item.Name && _labelText.Trim() != item.Name;
+
+    /// <summary>
+    /// Confirma lo que esté escrito y pendiente (hoy, el nombre del sector elegido) para que entre en la configuración y en el cálculo de
+    /// «cambios sin guardar». No depende del foco: se llama antes de guardar, de ocultar la ventana y de decidir si se puede cerrar.
+    /// Devuelve <c>false</c> solo si había algo pendiente y la configuración lo rechazó (el texto vuelve a lo que había y se avisa).
+    /// </summary>
+    public bool CommitPending() => !HasPendingEdits || CommitLabelText().Success;
 
     public string InspectorKind => SelectedItem switch
     {
@@ -689,6 +716,8 @@ public sealed class EditorViewModel : ObservableObject
             Report(result);
             _labelText = item.Name;
             Raise(nameof(LabelText));
+            Raise(nameof(HasPendingEdits));
+            PendingChanged?.Invoke();
         }
 
         return result;
@@ -825,6 +854,7 @@ public sealed class EditorViewModel : ObservableObject
             Raise(name);
         }
 
+        Raise(nameof(HasPendingEdits));
         Enter.RaiseCanExecuteChanged();
         Duplicate.RaiseCanExecuteChanged();
         Remove.RaiseCanExecuteChanged();
@@ -832,6 +862,7 @@ public sealed class EditorViewModel : ObservableObject
         ResetLabel.RaiseCanExecuteChanged();
         ConvertToGroup.RaiseCanExecuteChanged();
         CreateGroup.RaiseCanExecuteChanged();
+        PendingChanged?.Invoke();
     }
 
     /// <summary>Reconstruye todo lo derivado de la configuración (árbol, sectores, camino, selector) y avisa a la vista previa.</summary>

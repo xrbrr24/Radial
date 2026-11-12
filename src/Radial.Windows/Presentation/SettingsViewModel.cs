@@ -1,6 +1,7 @@
 using Radial.Core.Editing;
 using Radial.Core.Model;
 using Radial.Core.Validation;
+using Radial.Windows.Runtime;
 
 namespace Radial.Windows.Presentation;
 
@@ -13,16 +14,18 @@ namespace Radial.Windows.Presentation;
 public sealed class SettingsViewModel : ObservableObject
 {
     private readonly ConfigurationSession _session;
+    private readonly IStartupRegistration _startup;
     private int _submenuDwellMs;
     private int _backDwellMs;
     private int _maxDepth;
     private string _message = string.Empty;
     private bool _applying;
 
-    public SettingsViewModel(ConfigurationSession session)
+    public SettingsViewModel(ConfigurationSession session, IStartupRegistration? startup = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         _session = session;
+        _startup = startup ?? NullStartupRegistration.Instance;
         RestoreDefaults = new RelayCommand(ResetToDefaults);
         _session.Changed += Refresh;
         Refresh();
@@ -55,6 +58,26 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _maxDepth;
         set => ApplyNavigation(_submenuDwellMs, _backDwellMs, value);
+    }
+
+    /// <summary>
+    /// Si Radial se inicia al entrar en Windows. Es una preferencia local del equipo (Registro del usuario), no una edición del
+    /// radial ni del archivo config.json, por lo que no crea «cambios sin guardar» en la biblioteca o los menús.
+    /// </summary>
+    public bool StartWithWindows
+    {
+        get => _startup.IsEnabled;
+        set
+        {
+            if (value == _startup.IsEnabled)
+            {
+                return;
+            }
+
+            var result = _startup.SetEnabled(value);
+            Message = result.Success ? string.Empty : result.Message;
+            Raise(nameof(StartWithWindows));
+        }
     }
 
     /// <summary>Por qué no se aplicó el último cambio; vacío si todo fue bien.</summary>

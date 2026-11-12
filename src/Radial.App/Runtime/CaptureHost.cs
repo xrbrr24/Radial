@@ -2,10 +2,12 @@ using System.Windows;
 using System.Windows.Threading;
 using Radial.App.Diagnostics;
 using Radial.App.Overlay;
+using Radial.Core.Diagnostics;
 using Radial.Core.Engine;
 using Radial.Core.Execution;
 using Radial.Core.Model;
 using Radial.Core.Timing;
+using Radial.Windows.Diagnostics;
 using Radial.Windows.Input;
 using Radial.Windows.Overlay;
 
@@ -25,17 +27,31 @@ internal sealed class CaptureHost
     private readonly CancellationTokenSource _closing = new();
     private readonly DispatcherTimer _overlayPoll = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(15) };
     private readonly bool _selfTestMode;
+    private readonly ErrorReporter _reporter;
+    private readonly OperationTrail _trail;
+    private readonly DispatcherTimer _health = new(DispatcherPriority.Background) { Interval = HealthPeriod };
+    private readonly HashSet<string> _seenServiceErrors = new(StringComparer.Ordinal);
     private RadialConfiguration _configuration;
     private RadialConfiguration? _pendingConfiguration;
     private CancellationTokenSource? _selfTestCancel;
     private Task? _readerTask;
     private string? _readerLastFailure;
     private bool _shutDown;
+    private bool _hookSilentReported;
 
-    public CaptureHost(RadialConfiguration configuration, bool selfTestMode)
+    /// <summary>Cada cuánto se revisa si la captura global informa de errores nuevos o de un hook de ratón que dejó de responder.</summary>
+    private static readonly TimeSpan HealthPeriod = TimeSpan.FromSeconds(5);
+
+    public CaptureHost(RadialConfiguration configuration, bool selfTestMode, ErrorReporter reporter, OperationTrail trail)
     {
+        ArgumentNullException.ThrowIfNull(reporter);
+        ArgumentNullException.ThrowIfNull(trail);
+
         _configuration = configuration;
         _selfTestMode = selfTestMode;
+        _reporter = reporter;
+        _trail = trail;
+        _health.Tick += (_, _) => CheckHealth();
 
         Service = new GlobalInputService(new SystemEventsAdapter());
         Overlay = new OverlayWindow();
@@ -87,9 +103,6 @@ internal sealed class CaptureHost
     /// <summary>Se añadió una línea al registro.</summary>
     public event Action<string>? LineLogged;
 
-    /// <summary>Una acción terminó (con su resultado en texto), para avisar al usuario.</summary>
-    public event Action<string, ActionExecutionResult>? ActionCompleted;
-
     /// <summary>Se terminó la autoprueba aplazada y hay que continuar el cierre.</summary>
     public event Action? CloseContinues;
 
@@ -120,12 +133,44 @@ internal sealed class CaptureHost
             return;
         }
 
-        var result = Service.Start();
+        using var operation = _trail.Begin("iniciar la captura global");
+        StartCaptureCore();
+    }
+
+    private void StartCaptureCore()
+    {
+        StartResult result;
+        try
+        {
+            result = Service.Start();
+        }
+        catch (Exception exception)
+        {
+            // Start documenta que lanza si ya está en marcha; cualquier otro fallo inesperado tampoco puede tumbar la aplicación.
+            _reporter.Report(exception, ErrorOrigin.Capture, nameof(CaptureHost), "iniciar la captura global");
+            Log("NO se pudo iniciar: " + exception.GetType().Name);
+            return;
+        }
+
         Log(result.Success ? "Captura iniciada." : "NO se pudo iniciar: " + result.Message);
+        if (result.Success)
+        {
+            _health.Start();
+            return;
+        }
+
+        _reporter.ReportProblem(
+            ErrorImpact.Degraded,
+            nameof(CaptureHost),
+            "iniciar la captura global",
+            "No se pudo iniciar la captura global: " + result.Message,
+            "No se pudo iniciar la captura del gesto (Ctrl + botón central): el radial no responderá. Cierra otras copias de Radial y reinícialo.",
+            "capture-start-failed");
     }
 
     public void StopCapture()
     {
+        _health.Stop();
         Service.Stop();
         Log("Captura detenida.");
     }
@@ -150,6 +195,26 @@ internal sealed class CaptureHost
             return;
         }
 
+        using var operation = _trail.Begin("aplicar la configuración guardada al radial");
+
+        // El coordinador nuevo se crea ANTES de soltar el viejo: si falla, el radial sigue con el que tenía (y sus avisos conectados) y
+        // el fallo no sale por el flujo de guardado, cuando los cambios ya están en disco.
+        RadialOverlayCoordinator next;
+        try
+        {
+            next = CreateCoordinator(configuration);
+        }
+        catch (Exception exception)
+        {
+            _reporter.Report(
+                exception,
+                ErrorOrigin.Capture,
+                nameof(CaptureHost),
+                "aplicar la configuración guardada al radial",
+                "Los cambios se guardaron, pero no se pudieron aplicar al radial. Reinicia Radial para usarlos.");
+            return;
+        }
+
         _configuration = configuration;
         var old = Coordinator;
         var wasIsolated = old.IsIsolated;
@@ -163,7 +228,7 @@ internal sealed class CaptureHost
         }
 
         _overlayPoll.Stop();
-        Coordinator = CreateCoordinator(configuration);
+        Coordinator = next;
         if (wasIsolated)
         {
             Coordinator.Isolate();
@@ -174,13 +239,16 @@ internal sealed class CaptureHost
 
     private RadialOverlayCoordinator CreateCoordinator(RadialConfiguration configuration)
     {
-        var coordinator = new RadialOverlayCoordinator(configuration, new MonotonicClock(), Overlay, () => Service.LatestPointer, executor: ActionExecutors.Create());
+        // SOLO por la fábrica: así el coordinador de producción lleva el localizador de monitores (sin él, el radial no sigue al cursor).
+        var coordinator = RadialOverlayCoordinatorFactory.Create(configuration, Overlay, () => Service.LatestPointer, ActionExecutors.Create());
+        Log("[monitores] seguimiento entre monitores: " + (coordinator.FollowsMonitors ? "activo" : "DESACTIVADO (sin localizador de monitores)"));
         coordinator.Completed += OnCompleted;
         coordinator.Aborted += OnAborted;
         coordinator.MenuChanged += OnMenuChanged;
         coordinator.UnsupportedNavigation += OnUnsupportedNavigation;
         coordinator.ActionFinished += OnActionFinished;
         coordinator.SubscriberFailed += OnSubscriberFailed;
+        coordinator.FollowTrace += OnFollowTrace;
         return coordinator;
     }
 
@@ -192,7 +260,12 @@ internal sealed class CaptureHost
         coordinator.UnsupportedNavigation -= OnUnsupportedNavigation;
         coordinator.ActionFinished -= OnActionFinished;
         coordinator.SubscriberFailed -= OnSubscriberFailed;
+        coordinator.FollowTrace -= OnFollowTrace;
     }
+
+    // Diagnóstico del seguimiento entre monitores (Diagnóstico → registro): si al cruzar el borde no aparece ninguna línea «[monitores]»,
+    // Radial no vio al cursor en otro monitor.
+    private void OnFollowTrace(string line) => Log("[monitores] " + line);
 
     private void OnCompleted(RadialResult result) => Log(
         result.Kind == RadialResultKind.Execute
@@ -203,15 +276,28 @@ internal sealed class CaptureHost
 
     private void OnMenuChanged(RadialMenu menu, int depth) => Log($"[radial] menú «{menu.Name}» (nivel {depth})");
 
-    private void OnUnsupportedNavigation(MenuId target) =>
+    private void OnUnsupportedNavigation(MenuId target)
+    {
         Log($"[radial] cancelado: la pila de menús del motor («{target.Value}») no coincide con la mostrada; no se ejecutó nada");
+        _reporter.ReportProblem(
+            ErrorImpact.Recoverable,
+            nameof(CaptureHost),
+            "navegar entre menús del radial",
+            "La pila de menús del motor no coincide con la mostrada; se canceló el gesto sin ejecutar nada.",
+            "El radial se canceló por un estado inconsistente de los menús. No se ejecutó ninguna acción.",
+            "unsupported-navigation");
+    }
 
-    private void OnSubscriberFailed(string eventName, Exception exception) =>
-        Log($"[radial] ERROR en un suscriptor de {eventName}: {exception.GetType().Name}: {exception.Message}");
+    private void OnSubscriberFailed(string eventName, Exception exception)
+    {
+        Log($"[radial] ERROR en un suscriptor de {eventName}: {exception.GetType().Name}");
+        _reporter.Report(exception, ErrorOrigin.Action, nameof(CaptureHost), $"avisar del evento {eventName} del radial");
+    }
 
     /// <summary>
     /// Comunica el resultado de una acción. No se abre ningún cuadro de mensaje: robaría el foco a la aplicación que recibe el
-    /// atajo. Va al registro y a quien escuche <see cref="ActionCompleted"/> (un aviso dentro de la ventana de Radial, si está abierta).
+    /// atajo. Va a la lista de diagnóstico y, si falló, al sistema de errores: se registra en disco (con el identificador de la
+    /// acción y el código del error, sin su nombre ni su destino) y se avisa al usuario aunque Radial esté oculto en la bandeja.
     /// </summary>
     private void OnActionFinished(RadialItem item, ActionExecutionResult result)
     {
@@ -226,30 +312,38 @@ internal sealed class CaptureHost
 
         Log("[acción] " + text);
         LastAction = $"{DateTime.Now:HH:mm:ss}  {text}";
-        ActionCompleted?.Invoke(item.Name, result);
+        _trail.Note($"acción {item.Id.Value}: {result.Status}");
+
+        if (result.Status == ActionExecutionStatus.Failed && result.Error is { } error)
+        {
+            // El mensaje del ejecutor no incluye rutas ni direcciones (contrato de los ejecutores); el nombre es el que el usuario le
+            // puso, para que sepa cuál falló. En el registro solo van el identificador del elemento y el código.
+            _reporter.ReportProblem(
+                ErrorImpact.Recoverable,
+                nameof(CaptureHost),
+                "ejecutar una acción del radial",
+                $"La acción {item.Id.Value} falló con el código {error.Code}.",
+                $"«{item.Name}» no se pudo ejecutar: {error.Message}",
+                $"action|{error.Code}|{item.Id.Value}");
+        }
     }
 
     // ───────────────────────── Lector y gestos ─────────────────────────
 
     /// <summary>
     /// Supervisa la tarea del lector: se guarda y nunca termina en error (no queda sin observar). El fallo de un evento lo absorbe
-    /// el propio lector; un final inesperado lo gestiona el supervisor.
+    /// el propio lector; un final inesperado lo gestiona el supervisor; cualquier otra excepción se registra y se comunica.
     /// </summary>
-    private async Task SuperviseReaderAsync()
-    {
-        try
-        {
-            await Supervisor.RunAsync(_closing.Token);
-        }
-        catch
-        {
-            // El estado ya está guardado en el supervisor y lo muestra el diagnóstico; esta tarea no puede fallar.
-        }
-    }
+    private Task SuperviseReaderAsync() => _reporter.RunGuardedAsync(
+        async () => await Supervisor.RunAsync(_closing.Token),
+        ErrorOrigin.Capture,
+        nameof(CaptureHost),
+        "supervisar el lector de eventos");
 
     private void OnCaptureFailed(CaptureFailure failure)
     {
         _overlayPoll.Stop();
+        _health.Stop();
         Log("[captura] ERROR: " + failure.Reason);
         foreach (var problem in failure.CleanupProblems)
         {
@@ -257,11 +351,83 @@ internal sealed class CaptureHost
         }
 
         Log("[captura] La captura está detenida y no se reinicia sola: cierra y vuelve a abrir Radial.");
+
+        // La captura quedó detenida: es lo que Radial hace, así que es un problema que se comunica con Radial oculto o no.
+        _reporter.ReportProblem(
+            ErrorImpact.Degraded,
+            nameof(CaptureHost),
+            "supervisar el lector de eventos",
+            "La captura global se detuvo como fallo seguro: " + failure.Reason,
+            "La captura del gesto se detuvo por un error interno y no se reinicia sola. El radial no responderá hasta que reinicies Radial.",
+            "capture-failed",
+            failure.ReaderEnd.Exception);
+    }
+
+    /// <summary>
+    /// Revisa, cada pocos segundos mientras la captura corre, lo que el servicio de captura informa desde sus hilos (hooks y
+    /// temporizadores), que de otro modo solo se vería abriendo Diagnóstico. Un hook de ratón que deja de recibir eventos es un
+    /// problema que compromete la función (Windows puede quitar el hook sin avisar); los demás errores son recuperables.
+    /// </summary>
+    private void CheckHealth()
+    {
+        try
+        {
+            var diagnostics = Service.GetDiagnostics();
+            var silent = diagnostics.MouseActivity == MouseActivity.SilentWhileCursorMoves;
+            if (!silent)
+            {
+                _hookSilentReported = false;
+            }
+            else if (!_hookSilentReported)
+            {
+                // Solo al empezar la situación: mientras dure, no se repite cada revisión.
+                _hookSilentReported = true;
+                _reporter.ReportProblem(
+                    ErrorImpact.Degraded,
+                    nameof(CaptureHost),
+                    "vigilar los hooks de captura",
+                    "El hook de ratón no recibe eventos aunque el cursor se mueve: Windows puede haberlo eliminado.",
+                    "Windows puede haber desactivado la captura del ratón de Radial: el gesto puede no responder. Detén y vuelve a iniciar la captura en Diagnóstico, o reinicia Radial.",
+                    "hook-silent");
+            }
+
+            var newErrors = 0;
+            foreach (var message in diagnostics.Errors)
+            {
+                if (_seenServiceErrors.Add(message) && !message.Contains("hook de ratón no recibe eventos", StringComparison.OrdinalIgnoreCase))
+                {
+                    newErrors++;
+                    Log("[captura] " + message);
+                }
+            }
+
+            if (_seenServiceErrors.Count > 200)
+            {
+                _seenServiceErrors.Clear();
+            }
+
+            if (newErrors > 0)
+            {
+                _reporter.ReportProblem(
+                    ErrorImpact.Recoverable,
+                    nameof(CaptureHost),
+                    "vigilar los hooks de captura",
+                    $"La captura global informó de {newErrors} error(es) nuevo(s); el detalle está en Diagnóstico.",
+                    "La captura global ha informado de errores. Radial sigue funcionando; consulta Diagnóstico si el gesto falla.",
+                    "service-errors");
+            }
+        }
+        catch (Exception exception)
+        {
+            // Una revisión que falla no puede repetirse cada pocos segundos haciendo ruido: se registra, se avisa (con límite) y sigue.
+            _reporter.Report(exception, ErrorOrigin.Capture, nameof(CaptureHost), "vigilar los hooks de captura");
+        }
     }
 
     /// <summary>Procesa un evento del canal. El radial lo recibe aunque el registro falle: perder un «confirmado» dejaría el overlay visible.</summary>
     private void ProcessGesture(GestureEvent e)
     {
+        using var operation = _trail.Begin($"procesar gesto #{e.Sequence} {e.Kind}");
         try
         {
             GestureLog.Append(e);
@@ -277,6 +443,7 @@ internal sealed class CaptureHost
     {
         // Primero el estado (no puede fallar) y después el registro (puede ser justo lo que falla; el lector lo tolera).
         _readerLastFailure = $"{DateTime.Now:HH:mm:ss} evento #{e.Sequence} {e.Kind}: {exception.GetType().Name}: {exception.Message}";
+        _reporter.Report(exception, ErrorOrigin.Action, nameof(CaptureHost), $"procesar el evento #{e.Sequence} {e.Kind} del gesto");
         Log("[lector] ERROR al procesar un evento (se continúa con el siguiente): " + _readerLastFailure);
     }
 
@@ -293,6 +460,7 @@ internal sealed class CaptureHost
         catch (Exception exception)
         {
             Log("[overlay] ERROR: " + exception.Message);
+            _reporter.Report(exception, ErrorOrigin.Action, nameof(CaptureHost), "mostrar o actualizar el radial", "El radial no se pudo mostrar correctamente. Radial sigue funcionando.");
             Coordinator.Dismiss();
         }
 
@@ -318,6 +486,7 @@ internal sealed class CaptureHost
         catch (Exception exception)
         {
             Log("[overlay] ERROR: " + exception.Message);
+            _reporter.Report(exception, ErrorOrigin.Action, nameof(CaptureHost), "actualizar el radial con la posición del cursor", "El radial no se pudo actualizar y se cerró. Radial sigue funcionando.");
             Coordinator.Dismiss();
             _overlayPoll.Stop();
         }
@@ -400,8 +569,15 @@ internal sealed class CaptureHost
     /// </summary>
     public void Shutdown(Action? beforeOverlayClose = null)
     {
+        if (_shutDown)
+        {
+            return; // un cierre por error grave y el cierre normal de la ventana pueden coincidir: solo se hace una vez
+        }
+
         _shutDown = true;
+        _trail.Note("cierre ordenado de la captura");
         _overlayPoll.Stop();
+        _health.Stop();
         _closing.Cancel();
         try
         {

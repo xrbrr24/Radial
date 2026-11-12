@@ -8,7 +8,7 @@ namespace Radial.Windows.Tests.Presentation;
 /// <summary>El formulario de una acción: por tipo, con validación del dominio, y sin guardar nunca una definición inválida.</summary>
 public class ActionFormViewModelTests
 {
-    private static ActionFormViewModel NewForm(TestApp app, ActionKind kind) => ActionFormViewModel.ForNew(app.Editor, app.Services, kind);
+    private static ActionFormViewModel NewForm(TestApp app, ActionKind kind) => ActionFormViewModel.ForNew(app.Session, app.Services, kind);
 
     [Fact]
     public void AnEmptyShortcutForm_CannotBeSaved_AndSaysWhy()
@@ -105,6 +105,53 @@ public class ActionFormViewModelTests
         Assert.Equal("Informe anual", form.Name);
     }
 
+    [Theory]
+    [InlineData(ActionKind.Application, @"programa\app.exe")]
+    [InlineData(ActionKind.Application, "ms-settings:")]
+    [InlineData(ActionKind.File, @"informe.pdf")]
+    [InlineData(ActionKind.File, @"C:\Docs\informe.pdf:flujo")]
+    [InlineData(ActionKind.Folder, @"..\Documentos")]
+    [InlineData(ActionKind.Folder, @"\\?\C:\Datos")]
+    public void ATargetTheExecutorWouldAlwaysReject_IsNotSaved_AndSaysWhy(ActionKind kind, string path)
+    {
+        var app = new TestApp();
+        var form = NewForm(app, kind);
+        form.Name = "Destino imposible";
+        form.Path = path;
+        var before = app.Editor.Current.Actions.Count;
+
+        var result = form.Save();
+
+        Assert.False(result.Success);
+        Assert.False(form.CanSave);
+        Assert.NotEmpty(form.Problems);
+        Assert.Equal(before, app.Editor.Current.Actions.Count);
+    }
+
+    [Fact]
+    public void AProgramNameWithoutPath_AndAnAbsoluteWorkingDirectory_AreAccepted()
+    {
+        var app = new TestApp();
+        var form = NewForm(app, ActionKind.Application);
+        form.Name = "Bloc";
+        form.Path = "notepad.exe";
+        form.WorkingDirectory = @"C:\Datos";
+
+        Assert.True(form.CanSave, string.Join(" ", form.Problems));
+    }
+
+    [Fact]
+    public void ARelativeWorkingDirectory_IsNotSaved()
+    {
+        var app = new TestApp();
+        var form = NewForm(app, ActionKind.Application);
+        form.Name = "Bloc";
+        form.Path = "notepad.exe";
+        form.WorkingDirectory = "datos";
+
+        Assert.False(form.CanSave);
+        Assert.NotEmpty(form.Problems);
+    }
     [Fact]
     public void CancellingThePicker_ChangesNothing()
     {
@@ -139,7 +186,7 @@ public class ActionFormViewModelTests
         var app = new TestApp();
         var copy = app.Editor.Current.Actions.Single(a => a.Id == "edit.copy");
         var placementsBefore = app.Editor.PlacementsOf("edit.copy").Count;
-        var form = ActionFormViewModel.ForEdit(app.Editor, app.Services, copy);
+        var form = ActionFormViewModel.ForEdit(app.Session, app.Services, copy);
         form.Name = "Copiar texto";
         form.Key.KeyName = "Insert";
         form.Key.Control = true;
@@ -160,7 +207,7 @@ public class ActionFormViewModelTests
         var app = new TestApp();
         var unknown = new ActionDefinition("future.one", "Futura", ActionCategory.Custom, string.Empty, new IconReference(IconSource.Glyph, "Apps"), new UnknownAction("futureAction", "{\"type\":\"futureAction\"}"));
 
-        Assert.Throws<InvalidOperationException>(() => ActionFormViewModel.ForEdit(app.Editor, app.Services, unknown));
+        Assert.Throws<InvalidOperationException>(() => ActionFormViewModel.ForEdit(app.Session, app.Services, unknown));
     }
 
     [Fact]

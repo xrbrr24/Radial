@@ -18,7 +18,7 @@ public interface IConfigurationMigration
 /// <summary>
 /// Cadena de migraciones: lleva un archivo de la versión en que se escribió hasta <see cref="TargetVersion"/> aplicando, en orden,
 /// una migración por versión. Falta de un paso intermedio = error (no se salta nada). Una versión mayor que
-/// <see cref="TargetVersion"/> no se migra: la rechaza quien lee (<see cref="ConfigurationFile.Parse(string, ConfigurationMigrator?)"/>).
+/// <see cref="TargetVersion"/> no se migra: la rechaza quien lee (<see cref="ConfigurationFile.Parse(string, ConfigurationMigrator?, bool)"/>).
 /// </summary>
 public sealed class ConfigurationMigrator
 {

@@ -20,13 +20,21 @@ public class RadialOverlayCoordinatorActionTests
     {
         public bool Visible { get; private set; }
 
-        public double Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
+        public event Action<PresentedPlacement>? PlacementChanged
         {
-            Visible = true;
-            return 1.0;
+            add { }
+            remove { }
         }
 
-        public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => 1.0;
+        public PresentedPlacement Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
+        {
+            Visible = true;
+            return new PresentedPlacement(1.0, center);
+        }
+
+        public PresentedPlacement ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => new(1.0, center);
+
+        public PresentedPlacement FollowCursor(ScreenPoint cursor, PointD offsetDip) => new(1.0, cursor);
 
         public void SetProgress(RadialProgress progress)
         {

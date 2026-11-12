@@ -23,7 +23,7 @@ Al ejecutar `Radial.App` se carga la configuración, se instala la captura globa
 - **Configuración persistente en JSON:** `%LOCALAPPDATA%\Radial\config.json`. En el primer inicio se genera la predeterminada (las ocho acciones de antes: Copiar, Pegar, Deshacer, Seleccionar todo y Guardar en el menú principal, y Carpeta, Web y Navegador dentro del grupo «Abrir», al oeste). A partir de ahí manda el archivo: se puede editar a mano (ver abajo).
 - **Tipos de acción:** aplicación, archivo, carpeta, URL (`http`/`https`), atajo de teclado y abrir menú (grupo). Una acción de un tipo que esta versión no conoce se **conserva** en el archivo con todos sus datos, se avisa y **nunca se ejecuta**.
 - **Robustez:** un `config.json` corrupto no impide arrancar (se pone en cuarentena y se recupera una copia válida o la predeterminada); uno de una versión futura no se toca ni se sobrescribe; se guardan copias de seguridad (las 10 últimas) y se escribe de forma atómica.
-- Los fallos de una acción se avisan dentro del centro de control (si está visible) y se registran en Diagnóstico; todavía no hay notificaciones del sistema.
+- **Errores y avisos (S2):** todo error se registra en `%LOCALAPPDATA%\Radial\logs\` (con rotación, sin rutas ni datos del usuario). Los fallos de una acción, de la captura global o de la configuración se avisan aunque Radial esté oculto en la bandeja: dentro de la ventana si la estás mirando y, si no, con un globo de la bandeja (pulsarlo abre Diagnóstico); los problemas que comprometen el funcionamiento dejan además un banner en la ventana. Los avisos repetidos se agrupan. El menú de la bandeja tiene «Abrir carpeta de registros». Si Radial terminó por un error grave, el siguiente arranque lo avisa. Pendiente de validación manual (documento técnico, sección 20).
 - «Aceptada por Windows» no significa «procesada por la aplicación»: hacia una aplicación ejecutada como administrador, Windows puede descartar el teclado sin avisar.
 
 ### Estructura de la carpeta de datos
@@ -33,7 +33,7 @@ Al ejecutar `Radial.App` se carga la configuración, se instala la captura globa
 ├─ config.json          configuración activa
 ├─ backups\             config-aaaaMMdd-HHmmss-fff.json (las 10 últimas)
 ├─ icons\               (reservada: caché de iconos, fase 7)
-├─ logs\                (reservada)
+├─ logs\                registros de errores: radial-aaaaMMdd-NNN.log (14 archivos / 8 MiB como máximo) y last-fatal.txt
 └─ config.corrupt-*.json   archivos dañados puestos en cuarentena (los 10 últimos)
 ```
 

@@ -104,7 +104,7 @@ internal static class ActionJson
     /// texto, o si una propiedad tiene un tipo JSON equivocado. Una propiedad obligatoria AUSENTE no es un problema de lectura: la
     /// acción se crea con texto vacío y la validación del modelo la señala con su ruta.
     /// </summary>
-    public static RadialAction? FromJson(JsonObject json, string path, List<ValidationIssue> issues)
+    public static RadialAction? FromJson(JsonObject json, string path, List<ValidationIssue> issues, bool neutralizeInvalid = false)
     {
         ArgumentNullException.ThrowIfNull(json);
 
@@ -159,8 +159,30 @@ internal static class ActionJson
                 return new UnknownAction(type, json.ToJsonString());
         }
 
-        return issues.Count == before ? action : null;
+        if (issues.Count != before)
+        {
+            return null;
+        }
+
+        // Carga tolerante: una acción de tipo conocido con problemas propios (esquema de URL no admitido, tecla fuera del vocabulario,
+        // ruta vacía...) no debe tumbar toda la configuración. Se neutraliza ELLA sola: se conserva su JSON íntegro (se reescribe
+        // tal cual al guardar), no se ejecuta y se avisa con su ruta. La estructura (tipos JSON equivocados, menús) sigue siendo estricta.
+        if (neutralizeInvalid && action is not OpenMenuAction && action.GetProblems().ToList() is { Count: > 0 } problems)
+        {
+            issues.Add(new ValidationIssue(
+                ValidationSeverity.Warning,
+                ConfigurationCodes.ActionNeutralized,
+                $"La acción de tipo «{type}» no es válida y no se ejecutará (se conserva sin cambios en la configuración): {string.Join(" ", problems)}",
+                path));
+            return new UnknownAction(type, json.ToJsonString());
+        }
+
+        return action;
     }
+
+    /// <summary>El discriminador es de un tipo de acción que esta versión conoce (distinto de «desconocido»: una acción neutralizada lo conserva).</summary>
+    public static bool IsKnownType(string? type) =>
+        type is LaunchApplication or OpenFile or OpenFolder or OpenUrl or SendKeys or OpenMenu;
 
     private static JsonObject Typed(string type) => new() { ["type"] = type };
 

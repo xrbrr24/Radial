@@ -24,4 +24,10 @@ public static class ConfigurationCodes
 
     /// <summary>Un elemento referencia (<c>actionId</c>) una acción que no está en la biblioteca.</summary>
     public const string ActionRefMissing = "config.action-ref-missing";
+
+    /// <summary>
+    /// Aviso al cargar: una acción de un tipo conocido no es válida (dirección con un esquema no admitido, tecla fuera del vocabulario,
+    /// ruta vacía...). Solo se neutraliza esa acción: se conserva su JSON íntegro, no se ejecuta y el resto de la configuración carga.
+    /// </summary>
+    public const string ActionNeutralized = "config.action-neutralized";
 }

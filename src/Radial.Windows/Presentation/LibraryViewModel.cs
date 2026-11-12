@@ -256,7 +256,7 @@ public sealed class LibraryViewModel : ObservableObject
             return;
         }
 
-        OpenForm(ActionFormViewModel.ForNew(_session.Editor, _services, kind));
+        OpenForm(ActionFormViewModel.ForNew(_session, _services, kind));
     }
 
     private void BeginEdit()
@@ -272,7 +272,7 @@ public sealed class LibraryViewModel : ObservableObject
             return;
         }
 
-        OpenForm(ActionFormViewModel.ForEdit(_session.Editor, _services, row.Definition));
+        OpenForm(ActionFormViewModel.ForEdit(_session, _services, row.Definition));
     }
 
     private void OpenForm(ActionFormViewModel form)

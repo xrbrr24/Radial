@@ -211,7 +211,7 @@
 
                         <Border Style="{StaticResource Card}" Background="{DynamicResource Brush.Surface2}" Padding="14,12" Margin="0,0,0,14" Visibility="{Binding IsUnsupported, Converter={StaticResource VisibleWhenTrue}}">
                             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Warning}"
-                                       Text="Esta acción es de un tipo que esta versión de Radial no conoce. Se conserva tal cual en tu configuración, pero no se puede editar ni ejecutar." />
+                                       Text="Esta acción no se puede usar: es de un tipo que esta versión de Radial no conoce o no era válida al cargar la configuración. Se conserva tal cual, pero no se puede editar ni ejecutar desde aquí. Puedes eliminarla, o cerrar Radial, corregirla en config.json y volver a abrirlo." />
                         </Border>
 
                         <TextBlock Style="{StaticResource Text.Section}" Text="QUÉ HACE" Margin="0,0,0,6" />

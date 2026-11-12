@@ -1,5 +1,6 @@
 using System.Text;
 using Radial.Core.Catalog;
+using Radial.Core.Diagnostics;
 using Radial.Core.Model;
 using Radial.Core.Storage;
 using Radial.Core.Validation;
@@ -37,18 +38,24 @@ public sealed class FileSettingsStore : ISettingsStore
     private readonly object _gate = new();
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<RadialConfiguration> _defaults;
+    private readonly IRadialLog _log;
     private bool _protected;
 
     /// <param name="rootDirectory">Carpeta de datos de Radial; se crea si no existe.</param>
     /// <param name="utcNow">Reloj de las marcas de tiempo de copias y cuarentena (las pruebas lo fijan).</param>
     /// <param name="defaults">Origen de la configuración inicial; por defecto <see cref="DefaultConfiguration.Create()"/>.</param>
-    public FileSettingsStore(string rootDirectory, Func<DateTimeOffset>? utcNow = null, Func<RadialConfiguration>? defaults = null)
+    /// <param name="log">
+    /// Registro persistente de los fallos de disco (carpeta, lectura, escritura, cuarentena). Opcional. Solo recibe tipos de error y
+    /// nombres de operación: nunca el contenido de la configuración ni rutas.
+    /// </param>
+    public FileSettingsStore(string rootDirectory, Func<DateTimeOffset>? utcNow = null, Func<RadialConfiguration>? defaults = null, IRadialLog? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
 
         RootDirectory = Path.GetFullPath(rootDirectory);
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _defaults = defaults ?? DefaultConfiguration.Create;
+        _log = log ?? NullRadialLog.Instance;
     }
 
     /// <summary><c>%LOCALAPPDATA%\Radial</c>.</summary>
@@ -95,15 +102,12 @@ public sealed class FileSettingsStore : ISettingsStore
             switch (parsed.Status)
             {
                 case ConfigurationParseStatus.Ok:
-                    foreach (var warning in parsed.Issues.Where(i => i.Severity == ValidationSeverity.Warning))
-                    {
-                        notices.Add(new(SettingsNoticeSeverity.Warning, $"{warning.Path}: {warning.Message}"));
-                    }
-
+                    AddWarnings(notices, parsed);
                     return new SettingsLoadResult(parsed.Configuration!, SettingsSource.Loaded, notices, CanSave: true);
 
                 case ConfigurationParseStatus.FutureVersion:
                     _protected = true;
+                    _log.Write(LogLevel.Warning, nameof(FileSettingsStore), "La configuración es de una versión posterior de Radial: no se modifica ni se guarda.", operation: "cargar configuración");
                     notices.Add(new(SettingsNoticeSeverity.Error,
                         $"{Describe(parsed.Issues)} El archivo NO se modifica y no se guardará nada mientras tanto; se usan los valores predeterminados en memoria. Actualiza Radial para usar esa configuración."));
                     return InMemoryDefaults(notices);
@@ -131,6 +135,7 @@ public sealed class FileSettingsStore : ISettingsStore
             var validation = ConfigurationValidator.Validate(configuration);
             if (!validation.IsValid)
             {
+                _log.Write(LogLevel.Error, nameof(FileSettingsStore), $"La configuración no es válida y no se guarda ({validation.Errors.Count()} error(es)).", operation: "guardar configuración");
                 return SettingsSaveResult.Failed("La configuración no es válida y no se guarda: " + Describe(validation.Errors));
             }
 
@@ -182,8 +187,18 @@ public sealed class FileSettingsStore : ISettingsStore
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 TryDelete(temporary);
+                _log.Write(LogLevel.Error, nameof(FileSettingsStore), "No se pudo guardar la configuración.", exception, "guardar configuración");
                 return SettingsSaveResult.Failed("No se pudo guardar la configuración: " + exception.GetType().Name + ".");
             }
+        }
+    }
+
+    /// <summary>Los avisos de la lectura (acciones neutralizadas, destinos imposibles, acciones desconocidas...) como avisos de la carga.</summary>
+    private static void AddWarnings(List<SettingsNotice> notices, ConfigurationParseResult parsed)
+    {
+        foreach (var warning in parsed.Issues.Where(i => i.Severity == ValidationSeverity.Warning))
+        {
+            notices.Add(new(SettingsNoticeSeverity.Warning, $"{warning.Path}: {warning.Message}"));
         }
     }
 
@@ -193,6 +208,7 @@ public sealed class FileSettingsStore : ISettingsStore
     {
         notices.Add(new(SettingsNoticeSeverity.Warning,
             $"La configuración está dañada o no es válida y se pone en cuarentena. {Describe(problem.Issues)}"));
+        _log.Write(LogLevel.Warning, nameof(FileSettingsStore), "La configuración está dañada o no es válida: se pone en cuarentena y se recupera una copia.", operation: "cargar configuración");
 
         var quarantined = Quarantine();
         if (quarantined is null)
@@ -212,6 +228,7 @@ public sealed class FileSettingsStore : ISettingsStore
                 if (TryWriteNew(candidate.Bytes))
                 {
                     notices.Add(new(SettingsNoticeSeverity.Warning, $"Configuración restaurada desde la copia «{Path.GetFileName(backup)}»."));
+                    AddWarnings(notices, valid); // mismo criterio tolerante que el archivo principal: una acción inválida de la copia no la invalida, pero se avisa
                     return new SettingsLoadResult(valid.Configuration!, SettingsSource.RecoveredFromBackup, notices, CanSave: true);
                 }
 
@@ -247,6 +264,7 @@ public sealed class FileSettingsStore : ISettingsStore
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            _log.Write(LogLevel.Error, nameof(FileSettingsStore), "No se pudo poner la configuración dañada en cuarentena.", exception, "cargar configuración");
         }
 
         return null;
@@ -291,6 +309,7 @@ public sealed class FileSettingsStore : ISettingsStore
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             TryDelete(temporary);
+            _log.Write(LogLevel.Error, nameof(FileSettingsStore), "No se pudo crear config.json.", exception, "escribir configuración inicial");
             return false;
         }
     }
@@ -314,6 +333,7 @@ public sealed class FileSettingsStore : ISettingsStore
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
+            _log.Write(LogLevel.Error, nameof(FileSettingsStore), "No se pudo crear la carpeta de datos de Radial.", exception, "preparar carpeta de datos");
             notices.Add(new(SettingsNoticeSeverity.Error,
                 $"No se pudo crear la carpeta de datos de Radial ({exception.GetType().Name}); se usan los valores predeterminados en memoria."));
             return false;
@@ -330,10 +350,11 @@ public sealed class FileSettingsStore : ISettingsStore
             }
 
             var bytes = File.ReadAllBytes(path);
-            return (ConfigurationFile.Parse(bytes), bytes, null);
+            return (ConfigurationFile.Parse(bytes, salvageInvalidActions: true), bytes, null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            _log.Write(LogLevel.Error, nameof(FileSettingsStore), "No se pudo leer un archivo de configuración.", exception, "cargar configuración");
             return (null, null, exception.GetType().Name);
         }
     }

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using Radial.Core.Model;
 using Radial.Windows.Presentation;
 
 namespace Radial.App.Views;
@@ -101,21 +102,26 @@ public partial class ShellView : UserControl
             return;
         }
 
-        var control = Keyboard.Modifiers == ModifierKeys.Control;
-        if (control && e.Key == Key.S)
+        // La decisión de qué atajo global corresponde (y de que mientras se graba un atajo no hay ninguno, para que Ctrl+S y Ctrl+K lleguen
+        // al grabador) es del modelo de vista. Esta vista solo traduce la tecla de WPF a su código de tecla virtual.
+        var modifiers = Keyboard.Modifiers == ModifierKeys.Control ? KeyModifiers.Control : KeyModifiers.None;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        switch (_model.ResolveGlobalShortcut(modifiers, KeyInterop.VirtualKeyFromKey(key)))
         {
-            if (_model.Save.CanExecute(null))
-            {
-                _model.Save.Execute(null);
-            }
+            case ShellViewModel.GlobalShortcut.Save:
+                if (_model.Save.CanExecute(null))
+                {
+                    _model.Save.Execute(null);
+                }
 
-            e.Handled = true;
-        }
-        else if (control && e.Key == Key.K)
-        {
-            CommandBox.Focus();
-            CommandBox.SelectAll();
-            e.Handled = true;
+                e.Handled = true;
+                break;
+
+            case ShellViewModel.GlobalShortcut.FocusCommands:
+                CommandBox.Focus();
+                CommandBox.SelectAll();
+                e.Handled = true;
+                break;
         }
     }
 

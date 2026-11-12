@@ -52,6 +52,9 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
     /// <summary>Dónde quedó la ventana la última vez que se mostró (lo que pidió y lo que Windows dejó).</summary>
     public OverlayPlacementResult? LastPlacement { get; private set; }
 
+    /// <summary>El sector resaltado que dibuja la vista ahora mismo (para las herramientas de comprobación).</summary>
+    public RadialDirection? CurrentSelection => _view.Selection;
+
     /// <summary>Si la ventana en primer plano seguía siendo la misma justo después de mostrar el overlay la última vez.</summary>
     public bool? LastShowKeptForeground { get; private set; }
 
@@ -71,7 +74,7 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
     }
 
-    public double Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
+    public PresentedPlacement Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
     {
         Prepare();
         _center = center;
@@ -106,14 +109,14 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
             $"estilos 0x{styles.Raw:X8} (layered={styles.Layered}, click-through={styles.Transparent}, sin activar={styles.NoActivate}); " +
             $"foco: {(foregroundAfter == foregroundBefore ? "sin cambios" : "CAMBIÓ")}");
 
-        return OverlayPlacement.Scale(placement.Dpi);
+        return new PresentedPlacement(OverlayPlacement.Scale(placement.Dpi), placement.Requested.Center);
     }
 
     /// <summary>
     /// Cambia el menú de la ventana ya visible (entrar en un grupo o volver atrás) y la recoloca centrada en el cursor, sin ocultarla
     /// ni recrearla: se redibuja el contenido y se mueve en un solo paso (<see cref="OverlayWindowInterop.RecenterVisible"/>).
     /// </summary>
-    public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center)
+    public PresentedPlacement ShowMenu(RadialMenu menu, int depth, ScreenPoint center)
     {
         if (_geometry is null || _hwnd == IntPtr.Zero || !IsVisible)
         {
@@ -131,7 +134,32 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
             $"menú «{menu.Name}» (nivel {depth}) en ({center.X}, {center.Y}); DPI {placement.Dpi}; " +
             $"ventana {placement.Actual.Size}x{placement.Actual.Size} px en ({placement.Actual.X}, {placement.Actual.Y})");
 
-        return OverlayPlacement.Scale(placement.Dpi);
+        return new PresentedPlacement(OverlayPlacement.Scale(placement.Dpi), placement.Requested.Center);
+    }
+
+    /// <summary>
+    /// El cursor pasó a otro monitor: traslada la ventana ya visible al área de trabajo de ese monitor, con el cursor a
+    /// <paramref name="offsetDip"/> DIP del centro si cabe (<see cref="OverlayWindowInterop.FollowCursor"/>). No oculta ni redibuja.
+    /// </summary>
+    public PresentedPlacement FollowCursor(ScreenPoint cursor, PointD offsetDip)
+    {
+        if (_hwnd == IntPtr.Zero || !IsVisible)
+        {
+            throw new InvalidOperationException("No se puede seguir al cursor: el overlay no está visible.");
+        }
+
+        var dpi = LastPlacement?.Dpi ?? OverlayPlacement.BaseDpi;
+        var placement = OverlayWindowInterop.FollowCursor(_hwnd, cursor, offsetDip.X, offsetDip.Y, RadialTheme.ViewSize, dpi);
+        LastPlacement = placement;
+
+        // El centro «pedido» a partir de ahora es el centro ya ajustado, que está dentro del monitor nuevo: si Windows avisa de un cambio de
+        // DPI después, recolocar desde él da el mismo monitor (desde el centro ideal, que puede caer en el monitor anterior, no).
+        _center = placement.Requested.Center;
+        Diagnostic?.Invoke(
+            $"el cursor pasó a otro monitor ({cursor.X}, {cursor.Y}); DPI {placement.Dpi}; " +
+            $"ventana {placement.Actual.Size}x{placement.Actual.Size} px en ({placement.Actual.X}, {placement.Actual.Y})");
+
+        return new PresentedPlacement(OverlayPlacement.Scale(placement.Dpi), placement.Requested.Center);
     }
 
     public void SetSelection(RadialDirection? direction) => _view.SetSelection(direction);
@@ -144,20 +172,27 @@ internal sealed class OverlayWindow : Window, IRadialPresenter
         Hide();
     }
 
+    /// <inheritdoc />
+    public event Action<PresentedPlacement>? PlacementChanged;
+
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
 
-        // Windows sugiere un rectángulo al cambiar de monitor; se sustituye por el cálculo propio cuando termina el mensaje.
+        // Windows sugiere un rectángulo al cambiar de monitor; se sustituye por el cálculo propio cuando termina el mensaje. Ese
+        // cálculo puede dar otro centro (el ajuste a los bordes depende del tamaño en píxeles, que depende del DPI) y otra escala: se
+        // le dice al coordinador, que mide la selección desde el centro dibujado. Se usa el centro pedido VIGENTE al ejecutarse
+        // (un cambio de menú pudo cambiarlo entre tanto).
         if (_placed)
         {
-            var center = _center;
             Dispatcher.BeginInvoke(
                 () =>
                 {
                     if (_placed && IsVisible)
                     {
-                        OverlayWindowInterop.PlaceCentered(_hwnd, center, RadialTheme.ViewSize);
+                        var placement = OverlayWindowInterop.PlaceCentered(_hwnd, _center, RadialTheme.ViewSize);
+                        LastPlacement = placement;
+                        PlacementChanged?.Invoke(new PresentedPlacement(OverlayPlacement.Scale(placement.Dpi), placement.Requested.Center));
                     }
                 },
                 DispatcherPriority.Background);

@@ -2,6 +2,7 @@ using Radial.Core.Catalog;
 using Radial.Core.Editing;
 using Radial.Core.Model;
 using Radial.Core.Validation;
+using Radial.Windows.Runtime;
 using Radial.Windows.Shortcuts;
 
 namespace Radial.Windows.Presentation;
@@ -10,6 +11,12 @@ namespace Radial.Windows.Presentation;
 /// El formulario de una acción de la biblioteca (nueva o en edición). Los campos cambian con el tipo; el formulario NUNCA guarda
 /// una definición no válida: construye la definición, la valida con las mismas reglas del dominio que usan la carga y la
 /// ejecución, y solo entonces la entrega al editor. Tampoco crea ni edita acciones de tipo desconocido.
+///
+/// Comportamiento fijado (decisión del bloque S1, R1): el formulario es un BORRADOR independiente de la sesión. Siempre escribe en el
+/// editor vigente de la sesión, y si la sesión se descarta mientras está abierto, no se cierra ni se reconstruye: si el usuario lo
+/// guarda después, vuelve a aplicar sobre la sesión vigente los valores que contiene, aunque el descarte los hubiera revertido. La
+/// única excepción es una acción que ya no existe (p. ej. se creó en los cambios descartados): entonces <see cref="Save"/> falla con
+/// <c>NotFound</c> y conserva lo escrito, en lugar de resucitarla o dar un éxito falso.
 /// </summary>
 public sealed class ActionFormViewModel : ObservableObject
 {
@@ -17,7 +24,8 @@ public sealed class ActionFormViewModel : ObservableObject
     public static IReadOnlyList<ActionKind> CreatableKinds { get; } =
         [ActionKind.Shortcut, ActionKind.Application, ActionKind.File, ActionKind.Folder, ActionKind.Url];
 
-    private readonly ConfigurationEditor _editor;
+    // La sesión, no un editor: «Descartar» sustituye el editor de la sesión, y un formulario abierto debe seguir escribiendo en el vigente.
+    private readonly ConfigurationSession _session;
     private readonly UiServices _services;
     private readonly string? _editingId;
     private readonly bool _builtIn;
@@ -35,9 +43,10 @@ public sealed class ActionFormViewModel : ObservableObject
     private bool _loading;
     private string _saveError = string.Empty;
 
-    private ActionFormViewModel(ConfigurationEditor editor, UiServices services, string? editingId, bool builtIn)
+    private ActionFormViewModel(ConfigurationSession session, UiServices services, string? editingId, bool builtIn)
     {
-        _editor = editor;
+        ArgumentNullException.ThrowIfNull(session);
+        _session = session;
         _services = services;
         _editingId = editingId;
         _builtIn = builtIn;
@@ -54,9 +63,9 @@ public sealed class ActionFormViewModel : ObservableObject
     }
 
     /// <summary>Un formulario vacío para crear una acción del tipo dado.</summary>
-    public static ActionFormViewModel ForNew(ConfigurationEditor editor, UiServices services, ActionKind kind)
+    public static ActionFormViewModel ForNew(ConfigurationSession session, UiServices services, ActionKind kind)
     {
-        var form = new ActionFormViewModel(editor, services, null, false);
+        var form = new ActionFormViewModel(session, services, null, false);
         form._loading = true;
         form._kind = kind;
         form._category = DefaultCategory(kind);
@@ -66,7 +75,7 @@ public sealed class ActionFormViewModel : ObservableObject
     }
 
     /// <summary>Un formulario con los datos de una definición existente. Una definición de tipo desconocido no se puede editar.</summary>
-    public static ActionFormViewModel ForEdit(ConfigurationEditor editor, UiServices services, ActionDefinition definition)
+    public static ActionFormViewModel ForEdit(ConfigurationSession session, UiServices services, ActionDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.Action is UnknownAction)
@@ -74,7 +83,7 @@ public sealed class ActionFormViewModel : ObservableObject
             throw new InvalidOperationException("Una acción de tipo desconocido se conserva tal cual y no se puede editar.");
         }
 
-        var form = new ActionFormViewModel(editor, services, definition.Id, definition.IsBuiltIn);
+        var form = new ActionFormViewModel(session, services, definition.Id, definition.IsBuiltIn);
         form._loading = true;
         form._kind = ActionKinds.Of(definition.Action);
         form._name = definition.Name;
@@ -106,6 +115,9 @@ public sealed class ActionFormViewModel : ObservableObject
         form._loading = false;
         return form;
     }
+
+    /// <summary>El editor VIGENTE de la sesión (cambia cuando la sesión descarta); nunca se guarda una referencia a uno concreto.</summary>
+    private ConfigurationEditor Editor => _session.Editor;
 
     public KeyCaptureViewModel Key { get; }
 
@@ -214,7 +226,7 @@ public sealed class ActionFormViewModel : ObservableObject
     /// </summary>
     public ActionDefinition Build()
     {
-        var id = _editingId ?? _editor.NewDefinitionId(string.IsNullOrWhiteSpace(_name) ? "accion" : _name);
+        var id = _editingId ?? Editor.NewDefinitionId(string.IsNullOrWhiteSpace(_name) ? "accion" : _name);
         return new ActionDefinition(
             id,
             _name.Trim(),
@@ -238,8 +250,17 @@ public sealed class ActionFormViewModel : ObservableObject
             return EditResult.Fail(EditCodes.Invalid, problems[0]);
         }
 
+        // Si la sesión se descartó mientras tanto y la acción que se edita ya no existe (p. ej. se creó en los cambios descartados),
+        // no se resucita en silencio ni se muestra un éxito: se explica y el formulario conserva lo escrito.
+        if (!IsNew && !Editor.Current.TryGetDefinition(_editingId!, out _))
+        {
+            const string missing = "Esta acción ya no existe en la biblioteca (se descartaron los cambios que la creaban). Cierra el formulario y créala de nuevo.";
+            SaveError = missing;
+            return EditResult.Fail(EditCodes.NotFound, missing);
+        }
+
         var definition = Build();
-        var result = IsNew ? _editor.AddDefinition(definition) : _editor.UpdateDefinition(definition);
+        var result = IsNew ? Editor.AddDefinition(definition) : Editor.UpdateDefinition(definition);
         SaveError = result.Success ? string.Empty : result.Message;
         if (result.Success)
         {
@@ -300,7 +321,21 @@ public sealed class ActionFormViewModel : ObservableObject
         }
 
         // Con todo relleno, mandan las reglas del dominio (rutas, esquema, longitudes, etiquetas): una sola fuente de lo válido.
-        return problems.Count > 0 ? problems : definition.GetProblems().Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToList();
+        if (problems.Count > 0)
+        {
+            return problems;
+        }
+
+        problems.AddRange(definition.GetProblems().Where(p => !string.IsNullOrWhiteSpace(p)).Distinct());
+
+        // Lo que el ejecutor rechazaría SIEMPRE al ejecutar (ruta relativa, de dispositivo, con protocolo) no se guarda: si no, la
+        // acción parecería correcta en el editor y solo fallaría al usarla en el radial.
+        if (problems.Count == 0)
+        {
+            problems.AddRange(ActionTargets.GetProblems(definition.Action));
+        }
+
+        return problems;
     }
 
     private void OnFieldChanged()
@@ -390,4 +425,7 @@ public sealed record UiServices(IDialogService Dialogs, IFilePicker Files, IToas
 {
     /// <summary>Las definiciones de fábrica (para «restaurar las acciones de fábrica»); <c>null</c> si no se ofrece.</summary>
     public Func<IReadOnlyList<ActionDefinition>>? Factory { get; init; }
+
+    /// <summary>Arranque automático del usuario actual. Las herramientas de desarrollo conservan el valor nulo y nunca tocan el Registro.</summary>
+    public IStartupRegistration Startup { get; init; } = NullStartupRegistration.Instance;
 }

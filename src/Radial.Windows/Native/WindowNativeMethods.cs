@@ -35,6 +35,32 @@ internal static partial class WindowNativeMethods
         public int Bottom;
     }
 
+    internal const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MonitorPoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    /// <summary>Monitor que contiene el punto o, si no hay ninguno, el más cercano (nunca devuelve nulo con MONITOR_DEFAULTTONEAREST salvo fallo).</summary>
+    [LibraryImport("user32.dll")]
+    internal static partial IntPtr MonitorFromPoint(MonitorPoint pt, uint dwFlags);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     internal static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
@@ -51,4 +77,13 @@ internal static partial class WindowNativeMethods
 
     [LibraryImport("user32.dll")]
     internal static partial uint GetDpiForWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    internal static partial int GetSystemMetrics(int nIndex);
+
+    internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// <summary>Rectángulo visible de la ventana según DWM (sin sombras ni bordes invisibles de redimensionado).</summary>
+    [LibraryImport("dwmapi.dll")]
+    internal static partial int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
 }

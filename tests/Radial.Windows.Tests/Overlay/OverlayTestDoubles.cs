@@ -24,6 +24,19 @@ internal sealed class RecordingPresenter : IRadialPresenter
     /// <summary>Factor que devuelve <see cref="ShowMenu"/> (otro monitor); si no se indica, el mismo que <see cref="Scale"/>.</summary>
     public double? MenuScale { get; set; }
 
+    /// <summary>Imita el ajuste a los bordes de pantalla: dónde acaba el centro realmente dibujado para el centro pedido (por defecto, el mismo).</summary>
+    public Func<ScreenPoint, ScreenPoint>? FitCenter { get; set; }
+
+    public event Action<PresentedPlacement>? PlacementChanged;
+
+    /// <summary>Hay alguien suscrito a <see cref="PlacementChanged"/> (el coordinador solo se suscribe mientras hay un radial en pantalla).</summary>
+    public bool HasPlacementSubscribers => PlacementChanged is not null;
+
+    /// <summary>Imita que la ventana se recolocó sola (cambio de DPI): lo que notificaría <c>OverlayWindow</c>.</summary>
+    public void RaisePlacementChanged(PresentedPlacement placement) => PlacementChanged?.Invoke(placement);
+
+    private ScreenPoint Fit(ScreenPoint requested) => FitCenter?.Invoke(requested) ?? requested;
+
     public bool Visible { get; private set; }
 
     public int Shows { get; private set; }
@@ -44,16 +57,16 @@ internal sealed class RecordingPresenter : IRadialPresenter
 
     public int MenuChanges => Menus.Count - Shows;
 
-    public double Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
+    public PresentedPlacement Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
     {
         Visible = true;
         Shows++;
         Menus.Add((menu, 1, center));
         Log.Add("show");
-        return Scale;
+        return new PresentedPlacement(Scale, Fit(center));
     }
 
-    public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center)
+    public PresentedPlacement ShowMenu(RadialMenu menu, int depth, ScreenPoint center)
     {
         if (!Visible)
         {
@@ -67,7 +80,36 @@ internal sealed class RecordingPresenter : IRadialPresenter
 
         Menus.Add((menu, depth, center));
         Log.Add("menu:" + menu.Name);
-        return MenuScale ?? Scale;
+        return new PresentedPlacement(MenuScale ?? Scale, Fit(center));
+    }
+
+    /// <summary>Cada seguimiento del cursor a otro monitor que se pidió: dónde estaba el cursor y a cuántos DIP del centro.</summary>
+    public List<(ScreenPoint Cursor, PointD OffsetDip)> Follows { get; } = [];
+
+    /// <summary>
+    /// Lo que «hace Windows» al seguir al cursor (monitor nuevo, su escala, el ajuste a su área de trabajo). Por defecto deja el radial
+    /// exactamente donde se pidió (cursor a los mismos DIP del centro), a la escala <see cref="Scale"/>.
+    /// </summary>
+    public Func<ScreenPoint, PointD, PresentedPlacement>? FollowBehavior { get; set; }
+
+    public Exception? FailOnFollow { get; set; }
+
+    public PresentedPlacement FollowCursor(ScreenPoint cursor, PointD offsetDip)
+    {
+        if (!Visible)
+        {
+            throw new InvalidOperationException("Se siguió al cursor con el overlay oculto.");
+        }
+
+        if (FailOnFollow is not null)
+        {
+            throw FailOnFollow;
+        }
+
+        Follows.Add((cursor, offsetDip));
+        Log.Add("follow");
+        return FollowBehavior?.Invoke(cursor, offsetDip)
+            ?? new PresentedPlacement(Scale, OverlayPlacement.IdealCenter(cursor, offsetDip.X, offsetDip.Y, Scale));
     }
 
     public void SetSelection(RadialDirection? direction)
@@ -117,10 +159,10 @@ internal sealed class CoordinatorHarness
     private long _timestamp = 1_000;
 
     /// <param name="executor">Quien ejecuta las acciones; por defecto un ejecutor que solo las anota (<see cref="Executor"/>).</param>
-    public CoordinatorHarness(RadialConfiguration configuration, RecordingPresenter? presenter = null, IActionExecutor? executor = null)
+    public CoordinatorHarness(RadialConfiguration configuration, RecordingPresenter? presenter = null, IActionExecutor? executor = null, IMonitorLocator? monitors = null)
     {
         Presenter = presenter ?? new RecordingPresenter();
-        Coordinator = new RadialOverlayCoordinator(configuration, Clock, Presenter, () => Pointer, () => _timestamp, executor ?? Executor);
+        Coordinator = new RadialOverlayCoordinator(configuration, Clock, Presenter, () => Pointer, () => _timestamp, executor ?? Executor, monitors);
         Coordinator.ActionFinished += (item, result) =>
         {
             _finished.Enqueue((item, result));

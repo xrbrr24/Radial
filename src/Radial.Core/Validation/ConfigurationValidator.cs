@@ -135,7 +135,7 @@ public static class ConfigurationValidator
             ValidateDefinitionId(item.DefinitionId, $"{path}.definitionId", issues);
             ValidateLink(configuration, item, $"{path}.definitionId", issues);
             ValidateIcon(item.Icon, $"{path}.icon", issues);
-            ValidateAction(knownMenus, item.Action, $"{path}.action", issues);
+            ValidateAction(knownMenus, item.Action, $"{path}.action", issues, linked: item.DefinitionId is not null);
         }
     }
 
@@ -170,11 +170,13 @@ public static class ConfigurationValidator
                 Error(issues, ValidationCodes.LibraryDuplicateId, $"{path}.id", $"Ya existe una acción con el identificador '{definition.Id}'.");
             }
 
-            if (definition.Action is UnknownAction)
+            if (definition.Action is UnknownAction unknownDefinition)
             {
                 issues.Add(new ValidationIssue(ValidationSeverity.Warning, ValidationCodes.ActionUnknownType,
-                    "Esta acción es de un tipo que esta versión de Radial no conoce: se conserva en la biblioteca, pero no se puede ejecutar.", path));
+                    UnknownActionMessage(unknownDefinition, "la biblioteca"), path));
             }
+
+            AddTargetWarnings(definition.Action, path, issues);
         }
     }
 
@@ -232,7 +234,7 @@ public static class ConfigurationValidator
         }
     }
 
-    private static void ValidateAction(HashSet<MenuId> knownMenus, RadialAction? action, string path, List<ValidationIssue> issues)
+    private static void ValidateAction(HashSet<MenuId> knownMenus, RadialAction? action, string path, List<ValidationIssue> issues, bool linked)
     {
         if (action is null)
         {
@@ -247,10 +249,11 @@ public static class ConfigurationValidator
             {
                 Error(issues, ValidationCodes.ActionInvalid, path, "El tipo de la acción desconocida es obligatorio.");
             }
-            else
+            else if (!linked)
             {
+                // Una colocación enlazada a una definición inerte no repite el aviso de la definición (uno por acción, no uno por colocación).
                 issues.Add(new ValidationIssue(ValidationSeverity.Warning, ValidationCodes.ActionUnknownType,
-                    "Esta acción es de un tipo que esta versión de Radial no conoce: se conserva en la configuración, pero no se puede ejecutar.", path));
+                    UnknownActionMessage(unknown, "la configuración"), path));
             }
 
             return;
@@ -261,6 +264,12 @@ public static class ConfigurationValidator
             Error(issues, ValidationCodes.ActionInvalid, path, problem);
         }
 
+        // Una colocación enlazada ya tiene su aviso en la definición de la biblioteca: no se repite por cada colocación.
+        if (!linked)
+        {
+            AddTargetWarnings(action, path, issues);
+        }
+
         if (action is OpenMenuAction open &&
             !string.IsNullOrWhiteSpace(open.TargetMenuId.Value) &&
             !knownMenus.Contains(open.TargetMenuId))
@@ -268,6 +277,24 @@ public static class ConfigurationValidator
             Error(issues, ValidationCodes.ActionMenuMissing, path, $"El submenú '{open.TargetMenuId}' no existe.");
         }
     }
+
+    /// <summary>
+    /// Destinos que el ejecutor rechazaría siempre (ruta relativa, de dispositivo, con protocolo): <see cref="ActionTargets"/> es la
+    /// única definición. Es un AVISO: la configuración carga y esa acción falla al ejecutarse con un mensaje claro; invalidar toda la
+    /// configuración por un elemento no ayudaría a nadie. El editor sí lo rechaza al guardar (el formulario usa la misma política).
+    /// </summary>
+    private static void AddTargetWarnings(RadialAction? action, string path, List<ValidationIssue> issues)
+    {
+        foreach (var problem in ActionTargets.GetProblems(action))
+        {
+            issues.Add(new ValidationIssue(ValidationSeverity.Warning, ValidationCodes.ActionTargetRejected, problem + " La acción no se podrá ejecutar.", path));
+        }
+    }
+
+    private static string UnknownActionMessage(UnknownAction unknown, string place) =>
+        Storage.ActionJson.IsKnownType(unknown.Type)
+            ? $"Esta acción de tipo «{unknown.Type}» no es válida y no se puede ejecutar; se conserva sin cambios en {place}. Puedes eliminarla desde la biblioteca, o cerrar Radial, corregirla en config.json y volver a abrirlo."
+            : $"Esta acción es de un tipo que esta versión de Radial no conoce: se conserva en {place}, pero no se puede ejecutar.";
 
     private static void ValidateMenuGraph(RadialConfiguration configuration, List<ValidationIssue> issues)
     {

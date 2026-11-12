@@ -61,9 +61,22 @@ public abstract class ProcessActionExecutor<TAction> : IActionExecutor
             return ActionExecutionResult.Failure(ActionErrorCodes.InvalidAction, "La acción no es válida: " + string.Join(" ", problems));
         }
 
-        if (!TryPrepare(typed, out var request, out var failure))
+        // Las comprobaciones propias tocan el disco (File.Exists, Directory.Exists) y en una ruta de red caída o un disco dormido
+        // tardan segundos: quien llama es el hilo de interfaz, que además lee el gesto y dibuja el radial. Se hacen en el pool.
+        ProcessLaunchRequest? request;
+        ActionExecutionResult? failure;
+        try
         {
-            return failure;
+            (request, failure) = await Task.Run(() => Prepare(typed), cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return ActionExecutionResult.Cancelled;
+        }
+
+        if (request is null)
+        {
+            return failure!;
         }
 
         // Las comprobaciones anteriores pueden haber tocado el disco: última oportunidad de cancelar sin haber iniciado nada.
@@ -91,6 +104,9 @@ public abstract class ProcessActionExecutor<TAction> : IActionExecutor
             _ => ActionExecutionResult.Failure(ActionErrorCodes.LaunchFailed, LaunchFailedMessage(result.NativeErrorCode)),
         };
     }
+
+    private (ProcessLaunchRequest? Request, ActionExecutionResult? Failure) Prepare(TAction action) =>
+        TryPrepare(action, out var request, out var failure) ? (request, null) : (null, failure);
 
     private string LaunchFailedMessage(int nativeErrorCode) =>
         nativeErrorCode == 0

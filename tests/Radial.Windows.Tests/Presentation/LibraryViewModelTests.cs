@@ -49,7 +49,7 @@ public class LibraryViewModelTests
     public void SearchingByTheKeyNameOfTheActiveLayout_FindsTheNtildeShortcut()
     {
         var app = new TestApp();
-        var form = ActionFormViewModel.ForNew(app.Editor, app.Services, ActionKind.Shortcut);
+        var form = ActionFormViewModel.ForNew(app.Session, app.Services, ActionKind.Shortcut);
         form.Name = "Atajo con eñe";
         form.Key.Control = true;
         form.Key.KeyName = "Oem3";

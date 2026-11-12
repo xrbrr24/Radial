@@ -24,6 +24,9 @@ public static class ValidationCodes
     /// <summary>Aviso: el tipo de acción es desconocido para esta versión; se conserva pero no se ejecuta.</summary>
     public const string ActionUnknownType = "action.unknown-type";
 
+    /// <summary>El destino de una acción de archivo, carpeta o programa no se puede abrir nunca (ruta relativa, de dispositivo...). Aviso: la configuración carga y la acción falla al ejecutarse.</summary>
+    public const string ActionTargetRejected = "action.target-rejected";
+
     public const string ItemDefinitionIdInvalid = "item.definition-id-invalid";
 
     /// <summary>Una colocación referencia una definición que no está en la biblioteca.</summary>

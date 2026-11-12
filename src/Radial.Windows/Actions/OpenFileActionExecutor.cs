@@ -22,7 +22,7 @@ public sealed class OpenFileActionExecutor : ProcessActionExecutor<OpenFileActio
         [NotNullWhen(true)] out ProcessLaunchRequest? request,
         [NotNullWhen(false)] out ActionExecutionResult? failure)
     {
-        var verdict = TargetPolicy.Classify(action.Path);
+        var verdict = ActionTargets.Classify(action.Path);
         if (verdict == PathVerdict.Forbidden)
         {
             request = null;

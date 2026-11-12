@@ -114,7 +114,7 @@ public sealed class GlobalInputService : IDisposable
         get
         {
             var packed = Volatile.Read(ref _pointerPacked);
-            return new ScreenPoint((int)(packed >> 32), (int)(packed & 0xFFFFFFFF));
+            return PointerPacking.Unpack(packed);
         }
     }
 
@@ -556,7 +556,7 @@ public sealed class GlobalInputService : IDisposable
 
     private void StorePointer(ScreenPoint point)
     {
-        Volatile.Write(ref _pointerPacked, ((long)point.X << 32) | (uint)point.Y);
+        Volatile.Write(ref _pointerPacked, PointerPacking.Pack(point));
         Interlocked.Increment(ref _pointerSequence);
         Volatile.Write(ref _hasPointer, 1);
     }

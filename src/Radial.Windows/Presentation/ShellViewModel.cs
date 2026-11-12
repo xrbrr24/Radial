@@ -59,7 +59,7 @@ public sealed class ShellViewModel : ObservableObject
 
         Editor = new EditorViewModel(session, services);
         Library = new LibraryViewModel(session, services);
-        Settings = new SettingsViewModel(session);
+        Settings = new SettingsViewModel(session, services.Startup);
 
         NavItems =
         [
@@ -76,8 +76,8 @@ public sealed class ShellViewModel : ObservableObject
                 Go(section);
             }
         });
-        Save = new RelayCommand(SaveNow, () => _session.IsDirty && _session.CanSave);
-        Discard = new AsyncCommand(DiscardAsync, () => _session.IsDirty);
+        Save = new RelayCommand(SaveNow, () => IsDirty && _session.CanSave);
+        Discard = new AsyncCommand(DiscardAsync, () => IsDirty);
         ToggleCommands = new RelayCommand(() => IsCommandOpen = !IsCommandOpen);
         RunCommand = new RelayCommand(parameter =>
         {
@@ -97,6 +97,7 @@ public sealed class ShellViewModel : ObservableObject
         };
 
         _session.Changed += OnSessionChanged;
+        Editor.PendingChanged += OnSessionChanged;
         _saveState = ComputeState();
         Banner = LoadBanner(session.Loaded);
     }
@@ -180,7 +181,50 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
-    public bool IsDirty => _session.IsDirty;
+    /// <summary>
+    /// Hay cambios sin guardar: en la sesión, o un nombre escrito en el editor que todavía no se ha confirmado (no depende de que el
+    /// cuadro de texto haya perdido el foco). Es lo que muestran el estado de guardado, el botón Guardar y la pregunta al cerrar.
+    /// </summary>
+    public bool IsDirty => _session.IsDirty || Editor.HasPendingEdits;
+
+    /// <summary>
+    /// Confirma lo que esté escrito y pendiente en el editor para que entre en la configuración. Se llama antes de guardar, de ocultar
+    /// la ventana y de decidir si hay cambios al cerrar; la vista no necesita esperar a que ningún control pierda el foco.
+    /// Devuelve <c>false</c> si había una edición pendiente y la configuración la rechazó: quien llama debe cancelar lo que iba a hacer
+    /// (guardar, cerrar u ocultar la ventana) para que el usuario vea el aviso. El texto rechazado vuelve al nombre que había.
+    /// </summary>
+    public bool CommitPending() => Editor.CommitPending();
+
+    /// <summary>Un atajo global de la ventana (Ctrl+S, Ctrl+K).</summary>
+    public enum GlobalShortcut
+    {
+        None,
+        Save,
+        FocusCommands,
+    }
+
+    /// <summary>Hay un atajo de teclado grabándose en el formulario de la biblioteca: la pulsación es para el grabador, no para la ventana.</summary>
+    public bool IsRecordingShortcut => Library.Form?.Key.IsRecording == true;
+
+    /// <summary>
+    /// Qué atajo global (si alguno) corresponde a una pulsación. Mientras se graba un atajo no hay ninguno: Ctrl+S y Ctrl+K deben poder
+    /// grabarse como cualquier otra combinación. <paramref name="modifiers"/> son los modificadores pulsados y <paramref name="virtualKey"/>
+    /// el código de tecla virtual.
+    /// </summary>
+    public GlobalShortcut ResolveGlobalShortcut(KeyModifiers modifiers, int virtualKey)
+    {
+        if (IsRecordingShortcut || modifiers != KeyModifiers.Control)
+        {
+            return GlobalShortcut.None;
+        }
+
+        return virtualKey switch
+        {
+            0x53 => GlobalShortcut.Save, // S
+            0x4B => GlobalShortcut.FocusCommands, // K
+            _ => GlobalShortcut.None,
+        };
+    }
 
     public string SaveText => _saveState switch
     {
@@ -212,6 +256,24 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     public bool HasBanner => _banner.Length > 0;
+
+    /// <summary>
+    /// Muestra en el banner de la ventana un problema que compromete el funcionamiento de Radial (lo usa el sistema de avisos de errores,
+    /// <see cref="Radial.Windows.Diagnostics.NotificationRouter"/>). Reutiliza el banner existente: queda visible hasta que el usuario
+    /// lo cierra, así que se ve al abrir la ventana aunque el fallo ocurriera con Radial oculto en la bandeja. Un mensaje ya mostrado no
+    /// se repite; si se acumulan demasiados, manda el último. Solo desde el hilo de la interfaz.
+    /// </summary>
+    public void ShowProblem(string message)
+    {
+        const int MaxBannerLength = 600;
+        if (string.IsNullOrWhiteSpace(message) || _banner.Contains(message, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var combined = _banner.Length == 0 ? message : $"{_banner} {message}";
+        Banner = combined.Length > MaxBannerLength ? message : combined;
+    }
 
     // ───────────────────────── Búsqueda global ─────────────────────────
 
@@ -259,6 +321,13 @@ public sealed class ShellViewModel : ObservableObject
 
     public void SaveNow()
     {
+        // Lo escrito y no confirmado entra en la sesión ANTES de guardar; si no, se guardaría sin ello y el estado diría «guardado».
+        // Si la configuración rechaza esa edición (ya se avisó del motivo), no se guarda nada: el usuario debe ver el error antes.
+        if (!CommitPending())
+        {
+            return;
+        }
+
         if (!_session.CanSave)
         {
             Dialogs.Show(SaveDetail.Length > 0 ? SaveDetail : "No se puede guardar.", isError: true);
@@ -278,7 +347,7 @@ public sealed class ShellViewModel : ObservableObject
 
     private async Task DiscardAsync()
     {
-        if (!_session.IsDirty)
+        if (!IsDirty)
         {
             return;
         }
@@ -296,6 +365,13 @@ public sealed class ShellViewModel : ObservableObject
     /// </summary>
     public async Task<bool> ConfirmCloseAsync()
     {
+        // Antes de decidir si hay algo que guardar, lo escrito y pendiente se incorpora a la sesión. Si se rechaza (ya se avisó del
+        // motivo), el cierre se cancela: la ventana debe seguir disponible para que el usuario vea el error.
+        if (!CommitPending())
+        {
+            return false;
+        }
+
         if (!_session.IsDirty)
         {
             return true;
@@ -333,6 +409,7 @@ public sealed class ShellViewModel : ObservableObject
     private void OnSessionChanged()
     {
         SaveState = ComputeState();
+        Raise(nameof(IsDirty));
         Raise(nameof(SaveDetail));
         Raise(nameof(Breadcrumb));
         Save.RaiseCanExecuteChanged();
@@ -346,12 +423,12 @@ public sealed class ShellViewModel : ObservableObject
             return SaveState.ReadOnly;
         }
 
-        if (_session.LastSaveError is not null && _session.IsDirty)
+        if (_session.LastSaveError is not null && IsDirty)
         {
             return SaveState.Failed;
         }
 
-        return _session.IsDirty ? SaveState.Unsaved : SaveState.Saved;
+        return IsDirty ? SaveState.Unsaved : SaveState.Saved;
     }
 
     private static string LoadBanner(SettingsLoadResult loaded)
@@ -392,12 +469,12 @@ public sealed class ShellViewModel : ObservableObject
             }));
         }
 
-        if (_session.IsDirty && _session.CanSave)
+        if (IsDirty && _session.CanSave)
         {
             all.Add(new CommandEntry("Guardar cambios", "Escribe la configuración y la aplica al radial", "Save", SaveNow));
         }
 
-        if (_session.IsDirty)
+        if (IsDirty)
         {
             all.Add(new CommandEntry("Descartar cambios", "Vuelve a lo último guardado", "Undo", () => Discard.Execute(null)));
         }

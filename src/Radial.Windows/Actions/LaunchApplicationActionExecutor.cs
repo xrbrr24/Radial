@@ -8,7 +8,7 @@ namespace Radial.Windows.Actions;
 /// Lanza una aplicación (<see cref="LaunchApplicationAction"/>). El destino, los argumentos y el directorio de trabajo pasan tal
 /// cual al lanzador, separados. Aquí NO se comprueba que el archivo exista: un nombre sin ruta (<c>notepad.exe</c>) lo resuelve el
 /// sistema, y si no lo encuentra el lanzador lo informa (<see cref="ActionErrorCodes.TargetNotFound"/>). Sí se aplica la política
-/// mínima de <see cref="TargetPolicy"/>: el destino es una ruta absoluta o un nombre de programa (nunca una ruta relativa, de
+/// mínima de <see cref="ActionTargets"/>: el destino es una ruta absoluta o un nombre de programa (nunca una ruta relativa, de
 /// dispositivo ni un protocolo como <c>ms-settings:</c>) y el directorio de trabajo, si se indica, es absoluto; si no,
 /// <see cref="ActionErrorCodes.TargetNotAllowed"/> y no se lanza nada.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class LaunchApplicationActionExecutor : ProcessActionExecutor<Laun
         [NotNullWhen(true)] out ProcessLaunchRequest? request,
         [NotNullWhen(false)] out ActionExecutionResult? failure)
     {
-        if (!TargetPolicy.IsProgramTarget(action.Path) || (action.WorkingDirectory is not null && !TargetPolicy.IsAbsoluteFilePath(action.WorkingDirectory)))
+        if (!ActionTargets.IsProgramTarget(action.Path) || (action.WorkingDirectory is not null && !ActionTargets.IsAbsoluteFilePath(action.WorkingDirectory)))
         {
             request = null;
             failure = ActionExecutionResult.Failure(

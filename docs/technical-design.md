@@ -1,4 +1,4 @@
-# Radial — Documento técnico v0.20
+# Radial — Documento técnico v0.26
 
 Estado: **Fase 6 (biblioteca de acciones y editor radial): implementada, con CI en verde (`abca8b2`, ejecución nº 14) y sin validar a mano (19.1); las fases 4 y 5 siguen sin estar aprobadas manualmente.** **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **Fase 4 (overlay real y acciones): implementada, con validación automática confirmada y con validación manual básica parcial; NO está aprobada manualmente.** El commit `d4b3f8a` (que incluye la 4.1, la 4.2, el cierre técnico I1–I6, la protección de navegación y el fallo seguro del lector) pasó el workflow de GitHub Actions: ejecución nº 4, <https://github.com/xrbrr24/Radial/actions/runs/41900198820>, estado verde verificado en la API de GitHub; las cifras 694 Core / 992 Windows las comunicó el usuario y no son comprobables sin autenticación (15.5). Siguen **aplazadas** las pruebas manuales P1, P3–P6 y P9, el cierre sin procesos colgados y todo lo de DPI, varios monitores, bordes y 25H2 (17.11, 17.12). **Fase 5 (submenús en el overlay, configuración persistente en JSON, bandeja): implementada; compilación y pruebas automáticas en verde en CI (commit `1772b59`, ejecución nº 7, <https://github.com/xrbrr24/Radial/actions/runs/42001660093>, estado verde verificado en la API; cifras por suite sin comprobar), y no se ha probado a mano** (sección 18). Todo lo demás (fases 6, 7 y 8) sigue siendo diseño.
 
@@ -8,6 +8,12 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 
 | Versión | Cambios |
 |---|---|
+| **v0.26** | **El seguimiento entre monitores no se activaba en la aplicación real.** Causa: `CaptureHost` construía `RadialOverlayCoordinator` sin el `IMonitorLocator` (parámetro opcional, nulo), así que `FollowMonitor` retornaba siempre; las pruebas y `--edge-check` lo construían con él. Corrección: `RadialOverlayCoordinatorFactory` (única composición de producción, usada también por `--edge-check`), diagnóstico `FollowTrace` («[monitores]» en Diagnóstico) y `PointerPacking` (posición del hook con signo, probada con coordenadas negativas). Pruebas escritas y sin ejecutar (15.5); sin validar a mano. |
+| **v0.25** | **El radial sigue al cursor entre monitores** (6.4). `IMonitorLocator`, `MonitorFollow` (regla pura con histéresis de 12 DIP), `IRadialPresenter.FollowCursor` y `OverlayWindowInterop.FollowCursor` (monitor del cursor, DPI recalculado, desfase en DIP). Con desplazamiento forzado por el borde, la selección se suspende hasta que el cursor se mueve (nunca un salto de sector). `--edge-check` recorre ahora los cruces reales en ambos sentidos. Pruebas escritas y sin ejecutar (15.5); DPI distintos solo probados con monitores falsos; sin validar a mano. |
+| **v0.24** | **Bordes: la prueba manual vio el menú cortado.** Causa comprobada: se ejecutaba una compilación del 5-nov (`src/Radial.App/bin/Release`) sin ningún código de ajuste a bordes (verificado por la ausencia de `MonitorFromPoint`/`ArmDistanceDip`/`PlacementChanged` en su `Radial.Windows.dll`), mientras las compilaciones de la sesión iban a una carpeta temporal por la regla de no pisar una instancia en marcha; con instancia única, abrir la nueva solo trae al frente la vieja. Medidas: `BuildIdentity` (fecha de compilación en el título, la bandeja y el registro), `--edge-check` (ruta real coordinador + ventana en cada borde/esquina de cada monitor; 192 comprobaciones correctas en este equipo, dos monitores a 125 %), y el ajuste pasa al área de trabajo (una barra anclada ya no puede tapar el radial). Sin resolver: barra de tareas oculta automáticamente. Pruebas escritas y sin ejecutar (15.5). |
+| **v0.23** | **Acciones inertes y DPI.** Una acción inválida al cargar conserva identidad, vínculo con la biblioteca y colocaciones al guardar y reiniciar (`ConfigurationFile.IsLinked`; antes se guardaba en línea y se desvinculaba); el aviso es uno por acción; sus mensajes solo ofrecen eliminarla o corregir `config.json` con Radial cerrado. Copias de seguridad con acciones inválidas: recuperables con el mismo criterio tolerante, restauradas byte a byte y con sus avisos. `IRadialPresenter.PlacementChanged`: el coordinador se entera de que la ventana se recolocó sola por un cambio de DPI. Corregido un olvido de la v0.22: dos dobles de `IRadialPresenter` de las pruebas seguían devolviendo `double` y no habrían compilado. Pruebas escritas y sin ejecutar (15.5); sin validar a mano. |
+| **v0.22** | **Bordes de pantalla (E-1) resuelto con la opción C** (6.4): `OverlayPlacement.Fit` desplaza el radial hacia dentro lo justo para caber en el monitor del cursor, el motor mide desde el centro dibujado (`PresentedPlacement`) y no hay selección hasta que el cursor se mueve 10 DIP. **Política de destinos única en Core** (`ActionTargets`, antes `TargetPolicy` de Windows): ejecutores, formulario del editor y validador (aviso `action.target-rejected`). **Carga tolerante de `config.json`**: una acción de tipo conocido con errores propios se neutraliza sola (`UnknownAction` con su JSON íntegro, aviso `config.action-neutralized`) en lugar de poner en cuarentena toda la configuración; el editor y `Parse` por defecto siguen estrictos. `ProcessActionExecutor` hace sus comprobaciones de disco fuera del hilo de interfaz. Pruebas escritas y sin ejecutar (15.5); sin validar a mano. |
+| **v0.21** | **S2: fiabilidad y gestión de errores** (nueva sección 20). Registro persistente en `%LOCALAPPDATA%\Radial\logs\` con rotación y retención, captura global de excepciones (interfaz, otros hilos, tareas sin observar, arranque y cierre) con clasificación recuperable/degradado/fatal y presupuesto de errores, avisos al usuario que funcionan con Radial oculto en la bandeja (globo y banner, con limitación de repeticiones), marcador de cierre grave y fallos de acciones y de captura comunicados por este sistema. Pruebas escritas y sin ejecutar (15.5); sin validar a mano. |
 | **v0.20** | **Fase 6** (nueva sección 19). Biblioteca de acciones persistente independiente de las colocaciones (`RadialConfiguration.Actions`, categorías abiertas, etiquetas, reutilización), esquema versión 2 con migración real desde la 1 (`SchemaV1ToV2Migration`), vocabulario de teclas ampliado a 118 nombres estables por tecla virtual con captura de atajos y nombres según el teclado activo (sustituye al vocabulario cerrado de 66 de 17.5 y 17.6), `ConfigurationEditor`/`ActionSearch`/`ConfigurationSession` en Core, centro de control (editor radial con la misma vista previa del overlay, biblioteca, ajustes y diagnóstico) con tema centralizado, modelos de vista sin WPF en `Radial.Windows/Presentation` y `CaptureHost`. CI en verde en `abca8b2` (ejecución nº 14); sin validar a mano; las fases 4 y 5 siguen sin aprobarse manualmente. |
 | **v0.19** | **Fase 5** (nueva sección 18). Submenús conectados al overlay (`ShowMenu`, `SetProgress`, ancla de coordenadas y red de seguridad que sustituye a la protección temporal de 17.13), dibujo de grupos y progreso; configuración persistente en `%LOCALAPPDATA%\Radial\config.json` (JSON con `schemaVersion`, contexto `System.Text.Json` generado, migraciones encadenadas, versión futura intacta, cuarentena y recuperación, copias de seguridad, escritura atómica); acciones desconocidas conservadas y nunca ejecutadas (7.1); separación entre definición de acción y colocación (`DefinitionId`); configuración predeterminada generada (las ocho acciones, con un grupo «Abrir»); bandeja del sistema; la captura empieza sola. Documentación al día: CI confirmada en `d4b3f8a` (694 Core / 992 Windows según el usuario), fase 4 **no** aprobada manualmente. **Pruebas de la fase 5 en verde en CI en `1772b59` (las ejecuciones previas fallaron solo al compilar las pruebas, ver 18.1) y sin validar a mano.** |
 | **v0.18** | **Fallo seguro del ciclo de vida de la captura** (nueva 17.14). Si el lector de eventos termina sin que se haya pedido, `GestureReaderSupervisor` detiene la captura como fallo (`GlobalInputService.Fail`: hooks fuera, gesto cancelado, estado `Faulted`), oculta el overlay y lo comunica una sola vez; el cierre normal no es un fallo. Pruebas escritas, sin ejecutar localmente y pendientes de CI. La fase 4 sigue pendiente de aprobación expresa. |
@@ -169,7 +175,7 @@ Secuencia al mostrar: (1) `SetWindowPos` en píxeles físicos con tamaño mínim
 
 Redibujado solo desde `CompositionTarget.Rendering`. Referencia del spike (variante A, 125 %, 60 Hz, GPU integrada): aparición visible con mediana de 27.55 ms y P95 de 34.79 ms tras la primera, midiendo con un sondeo de píxel a 60 Hz (resolución ~16.7 ms). Objetivo propuesto, **sin validar en producción**: del chord al primer fotograma ≤ 100 ms. El consumo de CPU y los fotogramas por segundo del spike **no son representativos** (el overlay de prueba incluía un contador que forzaba el render continuo); el consumo real del overlay definitivo hay que medirlo en la fase 4.
 
-### 6.4 Bordes de pantalla (E-1) — ABIERTO
+### 6.4 Bordes de pantalla (E-1) — RESUELTO con la opción C (v0.22); sin validar a mano
 
 **Problema:** si el cursor está en el borde, un sector que apunta hacia fuera es inalcanzable: el cursor no puede alejarse del origen en esa dirección.
 
@@ -184,6 +190,8 @@ Redibujado solo desde `CompositionTarget.Rendering`. Referencia del spike (varia
 | **E. Selección por dirección de movimiento** | Usar el desplazamiento desde el punto de activación en lugar de la posición absoluta. | A pesar de ello, el movimiento hacia fuera sigue siendo imposible en el borde. |
 
 **MVP: criterios para decidir.** Habrá que comprobar que (1) no aparece un sector seleccionado accidentalmente; (2) el usuario entiende la correspondencia entre movimiento y sector; (3) la posición visual y el origen geométrico no causan confusión; (4) la solución funciona también con submenús recentrados. Hasta entonces la implementación base del MVP será la opción **A**, aislada tras una abstracción sustituible, y B/C se prueban como experimento.
+
+**Decisión (v0.22): opción C, implementada y sin validar a mano.** `OverlayPlacement.Fit` calcula, eje por eje, el centro más cercano al cursor con el que la ventana (tamaño físico = 420 DIP × escala del monitor) cabe entera en el área completa del monitor que contiene el cursor (`MonitorFromPoint`, `GetMonitorInfo`; sin `GetDpiForMonitor`). Lejos de los bordes devuelve el cursor sin tocarlo. Casos límite sin lanzar: monitor más pequeño que la ventana (ese eje se centra en el monitor), rectángulo no utilizable (no se ajusta), centro fuera del monitor (se lleva dentro), coordenadas extremas (aritmética de 64 bits). `IRadialPresenter.Show/ShowMenu` devuelven el centro dibujado; el coordinador ancla el motor en él, así que **dibujo y selección usan el mismo origen** (el cursor de activación solo sirve para el umbral). Hasta que el cursor se mueva 10 DIP (`ArmDistanceDip`, × escala del monitor) el motor ve el cursor en el centro: soltar sin mover no ejecuta nada ni entra en un grupo. Mismo tratamiento al cambiar de submenú. Criterios de arriba: (1) cubierto por pruebas del coordinador; (2)-(3) **por validar a mano** (¿se entiende que el radial se «pegue» al borde?); (4) cubierto por pruebas con presentador falso. **Límites:** desde la v0.25 el radial sigue al cursor a otro monitor (regla y límites en CLAUDE.md, «Seguimiento entre monitores»).
 
 ## 7. Configuración y almacenamiento
 
@@ -490,7 +498,7 @@ El análisis del grafo es iterativo: una cadena de 50 000 menús no desborda la 
 
 ### 14.9 Limitaciones conocidas
 
-- Los bordes de pantalla (E-1) siguen abiertos. El motor trabaja con el origen que le dan.
+- Bordes de pantalla (E-1): resuelto en la v0.22 (6.4). El motor sigue trabajando con el origen que le dan; el coordinador le da el centro dibujado.
 - La zona muerta está en las unidades del cursor. Quien lo integre debe escalarla con el DPI.
 - `NavigationStack` es una vista en vivo, no una copia; la interfaz debe leerla en el mismo hilo.
 - No hay límite al número de menús o elementos. Es aceptable para la validación (lineal), pero la importación (fase 8) deberá limitar el tamaño del archivo.
@@ -962,7 +970,7 @@ Decisiones y observaciones:
 | Dónde | Tipo | Función |
 |---|---|---|
 | `Radial.Core/Geometry` | `RadialLayout`, `SectorShape` | Disposición pura del dibujo: los cuatro vértices de cada sector anular y el punto de su etiqueta, con los mismos ángulos que `RadialGeometry` (norte = 0°, horario). Lo dibujado en una dirección es lo que el motor selecciona para un cursor sobre ese dibujo (prueba). |
-| `Radial.Windows/Overlay` | `OverlayPlacement` | Cálculo puro: tamaño físico (par, para que el cursor caiga en el píxel central) y rectángulo centrado en el cursor. No ajusta a los bordes (E-1, opción A: sin ajuste). |
+| `Radial.Windows/Overlay` | `OverlayPlacement` | Cálculo puro: tamaño físico (par, para que el cursor caiga en el píxel central) y rectángulo centrado en el cursor. No ajustaba a los bordes hasta la v0.22 (ahora `Fit`, 6.4) (E-1, opción A: sin ajuste). |
 | `Radial.Windows/Overlay` | `OverlayWindowInterop` | Parte Win32 sin WPF: añade `WS_EX_NOACTIVATE \| WS_EX_TOOLWINDOW \| WS_EX_TRANSPARENT`, lee los estilos, coloca según la secuencia de 6.2 (`GetDpiForWindow` del monitor de destino), contesta `WM_MOUSEACTIVATE` con `MA_NOACTIVATE`. P/Invoke aparte, en `Native/WindowNativeMethods.cs`; `NativeMethods` no se tocó. |
 | `Radial.Windows/Overlay` | `RadialOverlayCoordinator`, `IRadialPresenter` | Une gesto, motor y ventana: `Activated` → muestra el menú raíz sobre el cursor; el cursor se lee periódicamente y resalta el sector; `Confirmed`/`Cancelled` → oculta e informa (`Completed`/`Aborted`). No sabe de WPF. Mide en DIP relativos al centro (píxeles físicos ÷ escala del monitor), de modo que el radio de la zona central de la configuración coincide con el del botón central dibujado a cualquier DPI. |
 | `Radial.App/Overlay` | `OverlayWindow` | La ventana (ADR-001, variante A): `AllowsTransparency`, sin borde, `Topmost`, `ShowActivated=false`, `Focusable=false`. Se crea y prepara una vez al arrancar y se reutiliza. Implementa `IRadialPresenter`. |
@@ -999,7 +1007,7 @@ Decisiones y observaciones:
 - Que el clic **atraviesa** realmente el overlay hacia la ventana de debajo (solo se comprobó el estilo `WS_EX_TRANSPARENT`, no el efecto).
 - Foco con aplicaciones reales (el overlay no se activa según el estilo y según `GetForegroundWindow` justo después de mostrar; no se ha medido con aplicaciones concretas, pantalla completa exclusiva ni ventanas elevadas).
 - DPI de 100, 150 y 200 %, varios monitores con escalados distintos, cambio de monitor a mitad del gesto (el coordinador usa la escala del monitor donde se mostró; si el cursor cruza a otro monitor con distinto DPI durante el gesto, la medida queda desfasada) y `WM_DPICHANGED` real.
-- Comportamiento en los bordes de la pantalla (E-1, opción A): el radial puede quedar parcialmente fuera y los sectores exteriores ser inalcanzables.
+- Comportamiento en los bordes de la pantalla (E-1, opción C desde la v0.22, 6.4): implementado y sin validar a mano.
 - Windows 11 estable 25H2 (solo 26H2).
 - Rendimiento medido: el objetivo de 6.3 (del gesto al primer fotograma ≤ 100 ms) no se ha medido con este overlay.
 - Los iconos de archivo (`IconSource.File`) no se dibujan: se muestra un glifo neutro.
@@ -1145,7 +1153,7 @@ Qué cubren las pruebas de la 4.1 y la 4.2 (según los informes; **sin confirmar
 | P7 | DPI del 100 %, 150 % y 200 % | Solo el 125 % en comprobaciones sin entrada |
 | P8 | Varios monitores, cambio de monitor a mitad del gesto y `WM_DPICHANGED` real | El coordinador usa la escala del monitor donde se mostró |
 | P9 | **Aplicaciones de destino elevadas (UIPI)** | Windows puede descartar el teclado sin avisar; el fallo no es detectable |
-| P10 | Bordes y esquinas de la pantalla (E-1, opción A) | Sectores exteriores pueden ser inalcanzables |
+| P10 | Bordes y esquinas de la pantalla (E-1, opción C, v0.22) | Implementado (ajuste + umbral de 10 DIP); pendiente de validar con ratón real, DPI y varios monitores |
 | P11 | Juegos y pantalla completa exclusiva; aplicaciones que leen el teclado por scancode o entrada sin procesar | |
 | P12 | `Alt+Tab` y `Win+E` | Se envían, efecto sin comprobar; no están en el menú |
 | P13 | Windows 11 estable 25H2 | Solo 26H2 |
@@ -1297,7 +1305,7 @@ El motor (`RadialEngine`, fase 1) ya decidía todo (permanencia, recentrado, ret
 
 ### 18.4 Almacén en disco (`Radial.Windows/Storage/FileSettingsStore`)
 
-`ISettingsStore` (en Core) tiene `LoadOrCreate()` y `Save()`; ninguna operación lanza por el contenido ni por el disco. Carpeta: `%LOCALAPPDATA%\Radial\` con `config.json`, `backups\`, `icons\` y `logs\` (estas dos últimas reservadas).
+`ISettingsStore` (en Core) tiene `LoadOrCreate()` y `Save()`; ninguna operación lanza por el contenido ni por el disco. Carpeta: `%LOCALAPPDATA%\Radial\` con `config.json`, `backups\`, `icons\` (reservada) y `logs\` (registros de errores desde S2, sección 20).
 
 | Situación al cargar | Resultado |
 |---|---|
@@ -1390,3 +1398,89 @@ Límites nuevos (`ConfigurationLimits`): 500 caracteres de descripción, 12 etiq
 - **Fase 7:** temas (los tokens ya están centralizados), autoarranque con Windows, instancia única, notificaciones de fallo de acciones, iconos de archivo (`icons\`), tamaño y posición de la ventana, ajustes avanzados del gesto.
 - **Fase 8:** importar y exportar (con la política de rutas y tipos de archivo de 17.12), multimonitor y DPI mixto, empaquetado, firma y Smart App Control (15).
 - Sin hacer a propósito en esta fase: macros, scripts, accesibilidad completa del editor para lectores de pantalla (hay navegación con teclado en la vista previa, pero no se ha validado con ninguno), pruebas automáticas de la interfaz WPF.
+
+
+## 20. S2: fiabilidad y gestión de errores (v0.21)
+
+### 20.1 Estado: implementado; compilación del producto correcta; pruebas escritas y SIN ejecutar; sin validar a mano
+
+| Qué | Estado |
+|---|---|
+| Código (`Radial.Core/Diagnostics`, `Radial.Windows/Diagnostics`, integración en `Radial.App`) | **Implementado** |
+| Compilación Release del producto (`dotnet build src/Radial.App/Radial.App.csproj -c Release`) | **Correcta, 0 advertencias y 0 errores**, en el equipo de desarrollo |
+| Pruebas nuevas (Core y Windows) | **Escritas; no se compilan ni se ejecutan en el equipo de desarrollo (Smart App Control, 15.5).** Pendiente la ejecución de CI |
+| Comportamiento real (globo de bandeja, banner, cierre por error grave, rotación real de los archivos, hilo de escritura) | **Sin probar a mano** (20.8) |
+
+### 20.2 Qué puede hacer ahora el usuario
+
+Un fallo ya no se pierde: se escribe en un registro en disco y, según su gravedad, se avisa aunque Radial esté oculto en la bandeja. Las acciones que fallan (hasta ahora solo visibles dentro de la ventana abierta), la captura global que se detiene o un hook de ratón que Windows deja de entregar generan un globo de la bandeja; los problemas que comprometen el funcionamiento dejan además un banner en la ventana, visible al abrirla. Pulsar el globo abre Diagnóstico. El icono de la bandeja tiene una opción nueva, «Abrir carpeta de registros». Si Radial terminó por un error grave, el siguiente arranque lo avisa.
+
+### 20.3 Arquitectura
+
+```
+Origen del error ──▶ ErrorReporter.Report / ReportProblem ──▶ 1 clasifica (ErrorClassifier + ErrorBudget)
+ (Radial.App,            (Radial.Windows/Diagnostics)           2 registra   ──▶ IRadialLog ──▶ FileRadialLog ──▶ %LOCALAPPDATA%\Radial\logs\
+  Radial.Windows)                                               3 avisa      ──▶ NotificationThrottle ──▶ NotificationRouter ──┬─▶ ShellNoticeSink (banner / aviso en la ventana)
+                                                                4 si es fatal ──▶ FileFatalMarker + TerminationRequested        └─▶ TrayNoticeSink (globo de la bandeja, TrayIcon)
+```
+
+- **`Radial.Core/Diagnostics`** (sin Windows ni WPF; pura y con pruebas de Core): `IRadialLog` (por donde cualquier proyecto deja constancia, sin saber dónde se guarda), `LogEntry`, `LogLevel`, `LogFormatter` (formato), `LogSanitizer` (datos sensibles), `ErrorClassifier`/`ErrorImpact`/`ErrorOrigin` (política de recuperación), `ErrorBudget` (bucles de errores), `NotificationThrottle` (tormentas de avisos) y `LogRetention` (nombres y retención).
+- **`Radial.Windows/Diagnostics`** (sin WPF): `FileRadialLog` (el registro en disco), `ErrorReporter` (el punto único), `NotificationRouter` y los contratos `IUserNotifier`, `IUserPresence`, `INoticeSink`, `OperationTrail` (qué se estaba haciendo) y `FileFatalMarker`.
+- **`Radial.App`**: `Runtime/ErrorSystem` (composición y captura global), `Runtime/NoticeSinks` (los dos canales y la presencia de la ventana) y la integración en `App`, `MainWindow`, `CaptureHost` y `TrayIcon`. `FileSettingsStore` recibe un `IRadialLog` opcional para sus fallos de disco.
+- **No hay un segundo sistema de avisos:** se reutilizan el banner y los avisos de la ventana (`ShellViewModel.Banner`, `InAppDialogs`) y el `NotifyIcon` de la bandeja.
+
+### 20.4 Captura global (qué se captura y qué se hace)
+
+| Contexto | Mecanismo | Decisión |
+|---|---|---|
+| Hilo de interfaz (manejadores, comandos, enlaces, `async void`) | `Application.DispatcherUnhandledException` | Se marca como controlada siempre (decide el reportero). Se sigue, salvo tipo fatal o más de 5 errores en 60 s (presupuesto): entonces cierre ordenado |
+| Otro hilo (pool, temporizador) | `AppDomain.UnhandledException` | El runtime termina el proceso de todas formas. Se registra con vaciado a disco y se deja el marcador. **No** se intenta un cierre ordenado desde un hilo arbitrario con el estado posiblemente corrupto (podría bloquear el cierre) |
+| Tarea con fallo que nadie observó | `TaskScheduler.UnobservedTaskException` | Recuperable: se registra, se avisa y se marca como observada |
+| Trabajo lanzado y olvidado (`RunGuardedAsync`) | `try/catch` propio | Lector de eventos de la captura y «salir de Radial» (antes el primero tragaba cualquier excepción en silencio) |
+| Comandos asíncronos de la interfaz | `AsyncCommand.Failed` | Recuperable |
+| Arranque | `try/catch` de `App.OnStartup` | Fatal: se registra, se deja el marcador y se termina |
+| Cierre | `try/catch` en `MainWindow.ShutdownOnce` | Recuperable: se registra y se sigue cerrando |
+| Fallos de la captura (iniciar, hook silencioso, errores del servicio, lector detenido) | `CaptureHost` (`CheckHealth` cada 5 s mientras corre) | Degradado: globo + banner |
+| Almacenamiento | `FileSettingsStore` (registro) y los resultados que ya devolvía (aviso en la ventana) | Registro en disco; al usuario, como antes |
+
+**Clasificación (`ErrorClassifier`).** Son fatales en cualquier contexto `OutOfMemory`, `AccessViolation`, `StackOverflow`, `InvalidProgram`, `BadImageFormat`, `SEHException`, la caída de un dominio y `TypeInitializationException` (o cualquiera de ellas como interna): el proceso puede tener el estado corrupto y seguir «como si nada» lo ocultaría. Por origen: arranque y otro hilo, fatal; almacenamiento y captura, degradado; interfaz, tarea sin observar, acción y cierre, recuperable. Un error del propio aviso nunca escala ni vuelve a avisar (no hay bucle).
+
+**Cierre por error grave.** En el hilo de interfaz: se registra (nivel `Critical`, vaciado a disco), se deja `last-fatal.txt`, se suelta la captura global (`CaptureHost.Shutdown`: coordinador, hooks, overlay, bandeja), y se llama a `Application.Shutdown(1)`. Soltar los hooks ANTES de terminar importa: un proceso a medias con los hooks puestos dejaría el botón central consumido. El marcador solo guarda origen, tipo de excepción y operación, nunca el mensaje.
+
+### 20.5 Registro persistente
+
+- **Ubicación:** `%LOCALAPPDATA%\Radial\logs\radial-aaaaMMdd-NNN.log` (la carpeta ya estaba reservada, 7). Se crea si no existe. UTF-8 sin BOM, abiertos con uso compartido (se pueden leer mientras Radial corre).
+- **Formato:** `fecha ISO-8601 nivel [origen] t<hilo> op=<operación> | mensaje`, y debajo (sangrado) la excepción completa (tipo, mensaje y traza de cada una, hasta 6 niveles y 8 excepciones) y el rastro de las últimas 8 operaciones (`OperationTrail`: arranque, procesar gesto, aplicar configuración, acciones...). La operación en curso se toma del flujo de ejecución si quien informa no la da.
+- **Sin datos del usuario:** quien registra no pasa nombres ni rutas (de una acción se registra su identificador y el código del error); además `LogSanitizer` sustituye la carpeta de perfil por `%USERPROFILE%`, recorta de las direcciones web lo que sigue a `?` o `#` y limita la longitud.
+- **Escritura:** hilo propio y cola acotada (2000): `Write` no bloquea ni lanza; si la cola se llena se descartan entradas y se anota cuántas. Las entradas `Critical` esperan hasta 2 s a estar escritas. `Dispose` vacía la cola (espera hasta 3 s). Un fallo del propio registro (carpeta imposible, disco lleno, archivo bloqueado) se cuenta y se ignora: no hay fallo en cascada.
+- **Retención:** un archivo por día; al pasar de 1 MiB, el siguiente número. Se conservan los 14 más recientes y, además, como mucho 8 MiB en total; nunca se borra el archivo en uso ni otros archivos de la carpeta (`last-fatal.txt` incluido).
+
+### 20.6 Avisos al usuario
+
+- **Dos tipos:** `Notice` (una operación falló y Radial sigue entero; p. ej. una acción) y `Problem` (una función quedó comprometida o Radial va a cerrarse). Texto siempre escrito para personas; nunca el de la excepción. Los `Problem` añaden «Más detalles en la sección Diagnóstico y en la carpeta de registros.».
+- **Enrutado (`NotificationRouter`):** `Notice` dentro de la ventana si el usuario la está mirando (visible, no minimizada y **activa**; una ventana abierta detrás de otra aplicación no cuenta) y, si no, globo de la bandeja; con fallback al otro canal si falla o no existe. `Problem`: siempre los dos (globo para enterarse con la ventana oculta; banner para que se vea al abrirla). Si no hay canal (la bandeja aún no existe durante el arranque), se guarda (hasta 8) y se entrega al cargar la ventana.
+- **Tormentas (`NotificationThrottle`):** el mismo aviso no se repite antes de 30 s (el siguiente que se muestre dice «se repitió N veces»), y como mucho 3 avisos por minuto en total. Solo limita los avisos: el registro en disco no pasa por aquí.
+- **Sin bloqueos:** los canales llevan el aviso al hilo de interfaz con `Dispatcher.BeginInvoke` y no esperan; ningún aviso es un cuadro de mensaje del sistema ni un diálogo modal, y nada se avisa desde un hilo de hooks.
+- **Si el aviso falla**, el error ya está en el registro; el fallo del canal se anota y se prueba el otro.
+
+### 20.7 Decisiones de recuperación no evidentes
+
+1. **Siempre `Handled = true` en la interfaz**, con presupuesto: dejar la excepción sin controlar mataría el proceso sin soltar los hooks ni escribir nada; marcarla y seguir sin límite escondería un estado inestable. El presupuesto (5 errores por minuto, reloj monotónico) corta los bucles.
+2. **Error de otro hilo: no se intenta cerrar con orden.** El runtime ya termina el proceso; hacer `Service.Dispose()` (espera hasta 3 s al hilo de hooks) desde un hilo con estado dudoso podría colgar justo el cierre. Se escribe, se vacía a disco y se deja el marcador; los hooks desaparecen con el proceso.
+3. **Fallo al arrancar: sin cuadro de mensaje.** Mantiene la regla del proyecto (nada de cuadros del sistema). Consecuencia: el usuario solo se entera por el aviso del siguiente arranque o mirando los registros (20.9).
+4. **Aplicar la configuración al radial** (`CaptureHost.ApplyConfiguration`) crea el coordinador nuevo ANTES de soltar el viejo: si falla, el radial sigue con el anterior y el aviso dice que los cambios se guardaron pero no se aplicaron; antes la excepción salía por el flujo de guardado con los cambios ya en disco.
+5. **Los fallos de las acciones** pasan de verse solo en la ventana abierta a este sistema: se registran como advertencia (identificador y código, no nombre ni destino) y se avisan como `Notice`.
+6. **La autoprueba (`--selftest`) escribe registros** (no config). Las herramientas de desarrollo (`--render-ui`, `--render-preview`, `--overlay-check`) no crean el sistema de errores y siguen sin tocar el disco.
+
+### 20.8 Qué hay que probar a mano (sin hacer)
+
+(1) Con la ventana oculta, una acción que falla (p. ej. una carpeta que no existe) → globo en la bandeja; pulsarlo abre Diagnóstico. (2) Ventana abierta pero detrás de otra aplicación → también globo. (3) Ventana activa → aviso dentro de la ventana, sin globo. (4) Repetir el fallo varias veces → un solo aviso y luego «se repitió N veces». (5) «Abrir carpeta de registros» en el menú de la bandeja y comprobar el contenido. (6) Impedir la escritura de `logs\` (permisos) y comprobar que Radial sigue funcionando. (7) Simular un fallo grave (depuración) y comprobar: archivo `last-fatal.txt`, hooks liberados (el botón central vuelve a funcionar), aviso en el arranque siguiente. (8) Bloquear con otra herramienta `logs\radial-*.log` y comprobar que no hay cascada. (9) Rotación real con muchos registros. (10) Quitar el hook de ratón (la sonda lo detecta, 16.6) y comprobar el aviso.
+
+### 20.9 Limitaciones
+
+- Un fallo durante el arranque, antes de que exista la bandeja, no se puede comunicar en el momento: queda en el registro y se avisa en el siguiente arranque.
+- Un error no controlado en otro hilo no permite aviso en el momento (el proceso termina); solo registro y marcador.
+- No se instalan filtros de excepciones de primera oportunidad (`FirstChanceException`): solo lo que alcanza el límite del hilo o del trabajo lanzado.
+- El registro no está cifrado ni se envía a ningún sitio (sin telemetría): es local; el usuario decide si lo comparte.
+- Los hilos de los hooks (`LowLevelHookBase`) siguen sin registrar por sí mismos (callbacks mínimos): se revisan sus contadores desde `CheckHealth` cada 5 s.
+- Se han dejado sin cambiar los `catch` vacíos documentados de la fase 3 (`GestureEventReader`, `GestureReaderSupervisor`): su fallo ya llega al sistema por otros caminos y no tienen acceso al registro sin tocar los hooks.

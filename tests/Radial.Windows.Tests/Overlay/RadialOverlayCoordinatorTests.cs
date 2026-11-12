@@ -21,6 +21,12 @@ public class RadialOverlayCoordinatorTests
 
         public bool Visible { get; private set; }
 
+        public event Action<PresentedPlacement>? PlacementChanged
+        {
+            add { }
+            remove { }
+        }
+
         public int Shows { get; private set; }
 
         public int Hides { get; private set; }
@@ -33,7 +39,7 @@ public class RadialOverlayCoordinatorTests
 
         public Exception? FailOnShow { get; set; }
 
-        public double Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
+        public PresentedPlacement Show(RadialMenu menu, GeometrySettings geometry, ScreenPoint center)
         {
             Visible = true;
             Shows++;
@@ -44,10 +50,12 @@ public class RadialOverlayCoordinatorTests
                 throw FailOnShow;
             }
 
-            return Scale;
+            return new PresentedPlacement(Scale, center);
         }
 
-        public double ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => 1.0;
+        public PresentedPlacement ShowMenu(RadialMenu menu, int depth, ScreenPoint center) => new(1.0, center);
+
+        public PresentedPlacement FollowCursor(ScreenPoint cursor, PointD offsetDip) => new(1.0, cursor);
 
         public void SetProgress(RadialProgress progress)
         {

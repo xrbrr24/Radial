@@ -286,7 +286,7 @@ public sealed class ConfigurationEditor
 
         if (definition.Action is UnknownAction)
         {
-            return EditResult.Fail(EditCodes.NotAllowed, $"La acción «{definition.Name}» es de un tipo que esta versión no conoce y no se puede colocar.");
+            return EditResult.Fail(EditCodes.NotAllowed, $"La acción «{definition.Name}» no se puede usar (es de un tipo que esta versión no conoce o no es válida) y no se puede colocar.");
         }
 
         if (OccupiedMessage(menu, position, null) is { } occupied)

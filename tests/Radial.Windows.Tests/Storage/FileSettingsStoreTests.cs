@@ -144,6 +144,144 @@ public class FileSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void AFileWithInvalidActions_LoadsTheRest_NeutralizesOnlyThoseActions_AndIsNotQuarantined()
+    {
+        // Una dirección con un esquema no admitido (acción inválida), una carpeta con ruta relativa (destino imposible: solo aviso) y una buena.
+        var json = "{\"schemaVersion\":1,\"rootMenuId\":\"main\",\"menus\":[{\"id\":\"main\",\"name\":\"M\",\"items\":["
+            + "{\"id\":\"a\",\"name\":\"Correo\",\"position\":\"North\",\"action\":{\"type\":\"openUrl\",\"url\":\"mailto:alguien@example.com\"}},"
+            + "{\"id\":\"b\",\"name\":\"Relativa\",\"position\":\"East\",\"action\":{\"type\":\"openFolder\",\"path\":\"relativa\"}},"
+            + "{\"id\":\"c\",\"name\":\"Buena\",\"position\":\"South\",\"action\":{\"type\":\"openFolder\",\"path\":\"C:\\\\Docs\"}}]}]}";
+        WriteConfig(json);
+
+        var result = Store().LoadOrCreate();
+
+        Assert.Equal(SettingsSource.Loaded, result.Source);
+        Assert.True(result.CanSave);
+        Assert.Empty(Quarantined());
+        var items = result.Configuration.Menus[0].Items;
+        Assert.Equal(3, items.Count);
+        Assert.IsType<UnknownAction>(items.Single(i => i.Name == "Correo").Action);
+        Assert.Equal(new OpenFolderAction("relativa"), items.Single(i => i.Name == "Relativa").Action);
+        Assert.Equal(new OpenFolderAction(@"C:\Docs"), items.Single(i => i.Name == "Buena").Action);
+        Assert.Contains(result.Notices, n => n.Severity == SettingsNoticeSeverity.Warning && n.Message.Contains("no es válida y no se ejecutará"));
+        Assert.Contains(result.Notices, n => n.Severity == SettingsNoticeSeverity.Warning && n.Message.Contains("ruta relativa"));
+    }
+
+    [Fact]
+    public void AnInvalidActionInTheFile_IsKeptVerbatimWhenTheConfigurationIsSavedAgain()
+    {
+        var json = "{\"schemaVersion\":1,\"rootMenuId\":\"main\",\"menus\":[{\"id\":\"main\",\"name\":\"M\",\"items\":["
+            + "{\"id\":\"a\",\"name\":\"Correo\",\"position\":\"North\",\"action\":{\"type\":\"openUrl\",\"url\":\"mailto:alguien@example.com\"}}]}]}";
+        WriteConfig(json);
+        var store = Store();
+        var loaded = store.LoadOrCreate();
+
+        var saved = store.Save(loaded.Configuration with { Geometry = loaded.Configuration.Geometry with { DeadZoneRadius = 55 } });
+
+        Assert.True(saved.Success, saved.Message);
+        Assert.Contains("mailto:alguien@example.com", File.ReadAllText(ConfigPath));
+        Assert.Empty(Quarantined());
+    }
+
+    // Una acción inerte (inválida al cargar) y sus colocaciones: dos enlazadas a ella (una con nombre e icono propios) y una a una buena.
+    private const string InertConfig = """
+        {
+          "schemaVersion": 2,
+          "rootMenuId": "main",
+          "actions": [
+            { "id": "x", "name": "Correo", "category": "custom", "icon": { "source": "glyph", "value": "Link" },
+              "action": { "type": "openUrl", "url": "mailto:alguien@example.com", "note": "campo extra" } },
+            { "id": "ok", "name": "Docs", "category": "custom", "icon": { "source": "glyph", "value": "Folder" },
+              "action": { "type": "openFolder", "path": "C:\\Docs" } }
+          ],
+          "menus": [
+            { "id": "main", "name": "M", "items": [
+              { "id": "a", "position": "North", "actionId": "x", "label": "Mi correo", "icon": { "source": "glyph", "value": "Star" } },
+              { "id": "b", "position": "East", "actionId": "x" },
+              { "id": "c", "position": "South", "actionId": "ok" }
+            ] }
+          ]
+        }
+        """;
+
+    private const string NeutralizedText = "no es válida y no se ejecutará";
+
+    [Fact]
+    public void AnInertAction_KeepsItsIdentityLinkAndPlacements_AfterSavingAndRestarting()
+    {
+        WriteConfig(InertConfig);
+        var store = Store();
+        var loaded = store.LoadOrCreate();
+        Assert.Equal(SettingsSource.Loaded, loaded.Source);
+        Assert.Single(loaded.Notices, n => n.Message.Contains(NeutralizedText));
+
+        var saved = store.Save(loaded.Configuration with { Geometry = loaded.Configuration.Geometry with { DeadZoneRadius = 55 } });
+        Assert.True(saved.Success, saved.Message);
+
+        // «Reiniciar»: un almacén nuevo sobre la misma carpeta.
+        var restarted = Store().LoadOrCreate();
+
+        Assert.Equal(SettingsSource.Loaded, restarted.Source);
+        Assert.Empty(Quarantined());
+        Assert.Single(restarted.Notices, n => n.Message.Contains(NeutralizedText)); // un aviso por acción, no uno por colocación ni uno extra por guardar
+        var definition = Assert.Single(restarted.Configuration.Actions, d => d.Id == "x");
+        var inert = Assert.IsType<UnknownAction>(definition.Action);
+        Assert.Contains("campo extra", inert.RawJson); // el JSON original, completo
+
+        var items = restarted.Configuration.Menus[0].Items;
+        string[] expectedIds = ["a", "b", "c"];
+        Assert.Equal(expectedIds, items.Select(i => i.Id.Value).Order().ToArray());
+        var a = items.Single(i => i.Id.Value == "a");
+        var b = items.Single(i => i.Id.Value == "b");
+        Assert.Equal("x", a.DefinitionId);
+        Assert.Equal("x", b.DefinitionId);
+        Assert.Equal("Mi correo", a.LabelOverride);
+        Assert.Equal(inert, a.Action);
+        Assert.Equal(inert, b.Action);
+        Assert.Equal(new OpenFolderAction(@"C:\Docs"), items.Single(i => i.Id.Value == "c").Action);
+
+        // En el archivo, las colocaciones siguen siendo referencias, y el contenido de la acción sigue ahí.
+        var file = File.ReadAllText(ConfigPath);
+        Assert.Contains("mailto:alguien@example.com", file);
+        Assert.Contains("\"actionId\"", file);
+    }
+
+    [Fact]
+    public void ABackupWithAnInvalidAction_IsRecoverable_RestoredVerbatim_AndItsWarningsAreShown()
+    {
+        // Mismo criterio que el archivo principal: una acción inválida no invalida la copia, solo se neutraliza y se avisa.
+        Directory.CreateDirectory(BackupsPath);
+        File.WriteAllText(Path.Combine(BackupsPath, "config-20200101-000000-000.json"), InertConfig);
+        WriteConfig("{ original roto");
+
+        var result = Store().LoadOrCreate();
+
+        Assert.Equal(SettingsSource.RecoveredFromBackup, result.Source);
+        Assert.Equal(InertConfig, File.ReadAllText(ConfigPath)); // byte a byte: el JSON de la acción no se toca
+        Assert.IsType<UnknownAction>(result.Configuration.Actions.Single(d => d.Id == "x").Action);
+        Assert.Contains(result.Notices, n => n.Message.Contains("restaurada"));
+        Assert.Contains(result.Notices, n => n.Severity == SettingsNoticeSeverity.Warning && n.Message.Contains(NeutralizedText));
+        Assert.Equal("{ original roto", File.ReadAllText(Assert.Single(Quarantined())));
+    }
+
+    [Fact]
+    public void ABackupWithStructuralErrors_IsStillSkipped_EvenWithTheTolerantLoad()
+    {
+        // La carga tolerante solo neutraliza acciones: identificadores y posiciones duplicados siguen invalidando la copia.
+        Directory.CreateDirectory(BackupsPath);
+        var structural = "{\"schemaVersion\":1,\"rootMenuId\":\"main\",\"menus\":[{\"id\":\"main\",\"name\":\"M\",\"items\":["
+            + "{\"id\":\"x\",\"name\":\"A\",\"position\":\"North\",\"action\":{\"type\":\"openFolder\",\"path\":\"C:\\\\A\"}},"
+            + "{\"id\":\"x\",\"name\":\"B\",\"position\":\"North\",\"action\":{\"type\":\"openFolder\",\"path\":\"C:\\\\B\"}}]}]}";
+        File.WriteAllText(Path.Combine(BackupsPath, "config-20200101-000000-000.json"), structural);
+        WriteConfig("{ original roto");
+
+        var result = Store().LoadOrCreate();
+
+        Assert.Equal(SettingsSource.DefaultsAfterProblem, result.Source);
+        Assert.Contains(result.Notices, n => n.Message.Contains("no es utilizable"));
+    }
+
+    [Fact]
     public void AnOversizedFile_IsPutInQuarantine_WithoutBeingRead()
     {
         Directory.CreateDirectory(_directory.Root);
