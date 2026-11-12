@@ -2,7 +2,6 @@ using Radial.Core.Catalog;
 using Radial.Core.Editing;
 using Radial.Core.Model;
 using Radial.Core.Validation;
-using Radial.Windows.Runtime;
 using Radial.Windows.Shortcuts;
 
 namespace Radial.Windows.Presentation;
@@ -425,7 +424,4 @@ public sealed record UiServices(IDialogService Dialogs, IFilePicker Files, IToas
 {
     /// <summary>Las definiciones de fábrica (para «restaurar las acciones de fábrica»); <c>null</c> si no se ofrece.</summary>
     public Func<IReadOnlyList<ActionDefinition>>? Factory { get; init; }
-
-    /// <summary>Arranque automático del usuario actual. Las herramientas de desarrollo conservan el valor nulo y nunca tocan el Registro.</summary>
-    public IStartupRegistration Startup { get; init; } = NullStartupRegistration.Instance;
 }

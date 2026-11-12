@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using Radial.App.Runtime;
 using Radial.App.Tray;
 using Radial.Core.Diagnostics;
+using Radial.Core.Execution;
 using Radial.Windows.Native;
 using Radial.Windows.Presentation;
 using Radial.Windows.Runtime;
@@ -21,36 +22,36 @@ public partial class MainWindow : Window
     private readonly ShellViewModel _shell;
     private readonly ErrorSystem _errors;
     private readonly TrayIcon? _tray;
-    private readonly bool _startHidden;
     private bool _exiting;
     private bool _exitConfirmed;
     private bool _sessionEnding;
     private bool _hiddenHintShown;
     private bool _shutdownDone;
 
-    internal MainWindow(CaptureHost host, ShellViewModel shell, bool trayEnabled, ErrorSystem errors, bool startHidden = false)
+    internal MainWindow(CaptureHost host, ShellViewModel shell, bool trayEnabled, ErrorSystem errors)
     {
         _host = host;
         _shell = shell;
         _errors = errors;
-        _startHidden = startHidden;
         InitializeComponent();
         DataContext = shell;
 
-        // La compilación que se está ejecutando, visible: una instancia antigua en la bandeja hace que abrir otra compilación solo la traiga
-        // al frente (instancia única), y lo que se ve parece un fallo del código nuevo.
+        // La compilación que se está ejecutando, visible: una instancia antigua que siga en la bandeja sigue ejecutando el código viejo
+        // (Radial aún no tiene instancia única: es de la fase 7), y lo que se ve parece un fallo del código nuevo.
         var buildStamp = BuildIdentity.StampOf(typeof(MainWindow).Assembly);
         Title = BuildIdentity.WindowTitle(buildStamp);
 
         // Sin supervisión la ventana debe estar siempre encima: la autoprueba no inyecta nada si otra ventana tapa la zona de prueba.
         Topmost = host.SelfTestMode;
 
-        // Los fallos de las acciones y de la captura los comunica el sistema de errores (CaptureHost → ErrorReporter): dentro de esta
-        // ventana si el usuario la está mirando y, si no, en la bandeja. Nunca con un cuadro de mensaje: robaría el foco a la
-        // aplicación que recibe el atajo. Aquí solo se conectan sus dos canales.
+        // Los fallos de la captura, de la configuración y de la propia aplicación los comunica el sistema de errores (ErrorReporter):
+        // dentro de esta ventana si el usuario la está mirando y, si no, en la bandeja. El fallo de una ACCIÓN solo se dice dentro de
+        // la ventana (OnActionCompleted): avisarlo por la bandeja es de la fase 7. Nunca con un cuadro de mensaje: robaría el foco a
+        // la aplicación que recibe el atajo. Aquí solo se conectan los canales.
         errors.Presence.Attach(this);
         errors.InAppSink.Attach(shell, shell.Dialogs);
         errors.SetEmergencyShutdown(EmergencyShutdown);
+        host.ActionCompleted += OnActionCompleted;
         host.CloseContinues += Close;
 
         // Bandeja del sistema (solo en uso normal): mostrar la ventana, abrir los registros y salir. Al cerrar la sesión de Windows se
@@ -81,11 +82,6 @@ public partial class MainWindow : Window
             // Ya hay ventana y bandeja: se entregan los avisos que esperaban (arranque) y se anuncia un cierre grave anterior.
             errors.AnnouncePreviousFatal();
             errors.Router.DeliverPending();
-
-            if (_startHidden && _tray is not null)
-            {
-                Hide();
-            }
         };
     }
 
@@ -146,6 +142,15 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Un fallo de una acción se dice dentro de la ventana, sin cuadro de mensaje del sistema.</summary>
+    private void OnActionCompleted(string name, ActionExecutionResult result)
+    {
+        if (result.Status == ActionExecutionStatus.Failed && result.Error is { } error)
+        {
+            _shell.Dialogs.Show($"«{name}» no se pudo ejecutar: {error.Message}", isError: true);
+        }
+    }
+
     private void ShowFromTray()
     {
         Show();
@@ -156,12 +161,6 @@ public partial class MainWindow : Window
 
         Activate();
     }
-
-    /// <summary>
-    /// Una segunda ejecución de Radial pidió activar la primera instancia. Llega al dispatcher de esta ventana desde la tubería
-    /// local; reutiliza exactamente el flujo de «Mostrar Radial» de la bandeja y no crea otra captura ni otra sesión.
-    /// </summary>
-    internal void ActivateFromSecondInstance() => ShowFromTray();
 
     /// <summary>Cierra Radial de verdad (la opción «Salir» de la bandeja). Si hay una autoprueba en curso, se cancela y el cierre se completa al terminar.</summary>
     private void RequestExit()

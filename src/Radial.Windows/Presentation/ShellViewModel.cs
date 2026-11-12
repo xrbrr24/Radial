@@ -59,7 +59,7 @@ public sealed class ShellViewModel : ObservableObject
 
         Editor = new EditorViewModel(session, services);
         Library = new LibraryViewModel(session, services);
-        Settings = new SettingsViewModel(session, services.Startup);
+        Settings = new SettingsViewModel(session);
 
         NavItems =
         [

@@ -158,6 +158,23 @@ public sealed class ErrorReporter
     }
 
     /// <summary>
+    /// Deja constancia en el registro de un fallo que no es una excepción, SIN avisar al usuario por ningún canal (ni ventana ni
+    /// bandeja). Para lo que otra parte de la interfaz ya comunica por su cuenta. <paramref name="logMessage"/> no debe llevar datos
+    /// del usuario. No lanza.
+    /// </summary>
+    public void RecordProblem(ErrorImpact impact, string source, string operation, string logMessage)
+    {
+        try
+        {
+            SafeLog(impact == ErrorImpact.Recoverable ? LogLevel.Warning : LogLevel.Error, source, logMessage, null, operation);
+        }
+        catch (Exception failure)
+        {
+            NoteSelfFailure("registrar un fallo", failure);
+        }
+    }
+
+    /// <summary>
     /// Ejecuta trabajo asíncrono que nadie espera (se lanza y se olvida) sin que un fallo se pierda: una excepción se registra y se
     /// comunica según <paramref name="origin"/>; una cancelación es normal. La tarea devuelta nunca falla.
     /// </summary>

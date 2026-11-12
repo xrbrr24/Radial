@@ -95,6 +95,9 @@ internal sealed class CaptureHost
     /// <summary>La última acción ejecutada, para la sección de diagnóstico.</summary>
     public string LastAction { get; private set; } = "ninguna";
 
+    /// <summary>Una acción terminó (nombre y resultado). La ventana lo escucha para decir dentro de ella que una acción falló.</summary>
+    public event Action<string, ActionExecutionResult>? ActionCompleted;
+
     /// <summary>Un fallo del lector de eventos (si lo hubo), para la sección de diagnóstico.</summary>
     public string? ReaderLastFailure => _readerLastFailure;
 
@@ -296,8 +299,9 @@ internal sealed class CaptureHost
 
     /// <summary>
     /// Comunica el resultado de una acción. No se abre ningún cuadro de mensaje: robaría el foco a la aplicación que recibe el
-    /// atajo. Va a la lista de diagnóstico y, si falló, al sistema de errores: se registra en disco (con el identificador de la
-    /// acción y el código del error, sin su nombre ni su destino) y se avisa al usuario aunque Radial esté oculto en la bandeja.
+    /// atajo. Va a la lista de diagnóstico, al registro en disco si falló (con el identificador de la acción y el código del error,
+    /// sin su nombre ni su destino) y a quien escuche <see cref="ActionCompleted"/> (un aviso dentro de la ventana de Radial). Avisar
+    /// del fallo de una acción por la bandeja, con la ventana oculta, es de la fase 7: aquí no se hace.
     /// </summary>
     private void OnActionFinished(RadialItem item, ActionExecutionResult result)
     {
@@ -316,16 +320,15 @@ internal sealed class CaptureHost
 
         if (result.Status == ActionExecutionStatus.Failed && result.Error is { } error)
         {
-            // El mensaje del ejecutor no incluye rutas ni direcciones (contrato de los ejecutores); el nombre es el que el usuario le
-            // puso, para que sepa cuál falló. En el registro solo van el identificador del elemento y el código.
-            _reporter.ReportProblem(
+            // En el registro solo van el identificador del elemento y el código (el nombre y el destino son del usuario).
+            _reporter.RecordProblem(
                 ErrorImpact.Recoverable,
                 nameof(CaptureHost),
                 "ejecutar una acción del radial",
-                $"La acción {item.Id.Value} falló con el código {error.Code}.",
-                $"«{item.Name}» no se pudo ejecutar: {error.Message}",
-                $"action|{error.Code}|{item.Id.Value}");
+                $"La acción {item.Id.Value} falló con el código {error.Code}.");
         }
+
+        ActionCompleted?.Invoke(item.Name, result);
     }
 
     // ───────────────────────── Lector y gestos ─────────────────────────

@@ -368,6 +368,30 @@ public class ErrorReporterTests
     }
 
     [Fact]
+    public void RecordProblem_LogsWithoutNotifyingAnyChannel()
+    {
+        var rig = new Rig();
+
+        rig.Reporter.RecordProblem(ErrorImpact.Recoverable, "Origen", "ejecutar una acción", "La acción x falló con el código TargetNotFound.");
+        rig.Reporter.RecordProblem(ErrorImpact.Degraded, "Origen", "otra operación", "Algo más grave.");
+
+        Assert.Equal(2, rig.Logged.Entries.Count);
+        Assert.Equal(LogLevel.Warning, rig.Logged.Entries[0].Level);
+        Assert.Equal(LogLevel.Error, rig.Logged.Entries[1].Level);
+        Assert.Empty(rig.Notices.Notices);
+    }
+
+    [Fact]
+    public void RecordProblem_NeverThrows_EvenIfTheLogFails()
+    {
+        var rig = new Rig(log: new ThrowingLog());
+
+        var thrown = Record.Exception(() => rig.Reporter.RecordProblem(ErrorImpact.Recoverable, "Origen", "op", "mensaje"));
+
+        Assert.Null(thrown);
+    }
+
+    [Fact]
     public void ReportProblem_GroupsRepeatsByItsKey()
     {
         var rig = new Rig();

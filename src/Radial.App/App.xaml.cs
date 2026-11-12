@@ -9,14 +9,12 @@ using Radial.Windows.Presentation;
 using Radial.Windows.Runtime;
 using Radial.Windows.Shortcuts;
 using Radial.Windows.Storage;
-using System.Security.Principal;
 
 namespace Radial.App;
 
 public partial class App : Application
 {
     private ErrorSystem? _errors;
-    private SingleInstance? _singleInstance;
 
     // Uso:
     //   Radial.App.exe                        centro de control (editor radial, biblioteca de acciones, ajustes y diagnóstico);
@@ -82,22 +80,6 @@ public partial class App : Application
             return;
         }
 
-        // Las herramientas de desarrollo de arriba y la autoprueba deben poder coexistir con la aplicación normal: no instalan una
-        // instancia residente ni deben traerla al frente. El uso real sí es siempre de una sola instancia por usuario/sesión.
-        var selfTest = ValueOf(e.Args, "--selftest");
-        if (selfTest is null)
-        {
-            _singleInstance = SingleInstance.TryAcquire(CurrentUserScope());
-            if (!_singleInstance.IsPrimary)
-            {
-                var activated = _singleInstance.ActivatePrimaryAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
-                _singleInstance.Dispose();
-                _singleInstance = null;
-                Shutdown(activated ? 0 : 1);
-                return;
-            }
-        }
-
         // Lo PRIMERO, antes de cualquier componente que pueda fallar: el registro persistente y la captura global de errores
         // (documento técnico, sección 20). Las herramientas de desarrollo de arriba no lo usan: no deben tocar el disco.
         var errors = new ErrorSystem(ErrorSystem.DefaultLogDirectory, this);
@@ -105,7 +87,7 @@ public partial class App : Application
         errors.Install();
         try
         {
-            StartApplication(e.Args, errors, startHidden: selfTest is null && Array.IndexOf(e.Args, "--background") >= 0);
+            StartApplication(e.Args, errors);
         }
         catch (Exception exception)
         {
@@ -127,11 +109,10 @@ public partial class App : Application
             // Lo último: se vacía el registro para no perder las entradas del cierre.
             _errors?.Log.Info(nameof(App), $"Radial termina (código {e.ApplicationExitCode}).", "cierre");
             _errors?.Dispose();
-            _singleInstance?.Dispose();
         }
     }
 
-    private void StartApplication(string[] args, ErrorSystem errors, bool startHidden)
+    private void StartApplication(string[] args, ErrorSystem errors)
     {
         var selfTest = ValueOf(args, "--selftest");
         var assembly = typeof(App).Assembly;
@@ -160,7 +141,6 @@ public partial class App : Application
         var services = new UiServices(dialogs, new WpfFilePicker(), dialogs, new Win32KeyLabelProvider())
         {
             Factory = () => FactoryLibrary.Create(),
-            Startup = new StartupRegistration(errors.Log),
         };
 
         // Un fallo inesperado dentro de un comando asíncrono de la interfaz se registra y se avisa (con un texto para personas, no
@@ -177,23 +157,9 @@ public partial class App : Application
         }
 
         session.Saved += host.ApplyConfiguration;
-        var window = new MainWindow(host, shell, trayEnabled: selfTest is null, errors, startHidden);
-        _singleInstance?.Start(() => window.Dispatcher.BeginInvoke(window.ActivateFromSecondInstance));
+        var window = new MainWindow(host, shell, trayEnabled: selfTest is null, errors);
         window.Show();
         errors.Log.Info(nameof(App), "Radial listo.", "arranque");
-    }
-
-    private static string CurrentUserScope()
-    {
-        try
-        {
-            // El SID hace único el mutex y la tubería incluso si dos cuentas locales tienen el mismo nombre de usuario.
-            return WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
-        }
-        catch (PlatformNotSupportedException)
-        {
-            return Environment.UserName;
-        }
     }
 
     /// <summary>
