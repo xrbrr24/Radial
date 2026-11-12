@@ -283,7 +283,7 @@ public class ConfigurationLoadValidationTests
             { "id": "x", "name": "Correo", "category": "custom", "icon": { "source": "glyph", "value": "Link" },
               "action": { "type": "openUrl", "url": "mailto:alguien@example.com", "note": "campo extra" } },
             { "id": "ok", "name": "Docs", "category": "custom", "icon": { "source": "glyph", "value": "Folder" },
-              "action": { "type": "openFolder", "path": "C:\Docs" } }
+              "action": { "type": "openFolder", "path": "C:\\Docs" } }
           ],
           "menus": [
             { "id": "main", "name": "M", "items": [
@@ -399,7 +399,7 @@ public class ConfigurationLoadValidationTests
               "rootMenuId": "main",
               "actions": [
                 { "id": "x", "name": "X", "category": "custom", "icon": { "source": "glyph", "value": "Link" },
-                  "action": { "type": "openFolder", "path": "C:\Docs" } }
+                  "action": { "type": "openFolder", "path": "C:\\Docs" } }
               ],
               "menus": [
                 { "id": "main", "name": "M", "items": [

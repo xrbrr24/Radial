@@ -89,7 +89,7 @@ public sealed class FileFatalMarker : IFatalMarker
         }
     }
 
-    private static string OneLine(string text) => text.Replace('\r', ' ').Replace('\n', ' ');
+    private static string OneLine(string text) => text.ReplaceLineEndings(" ");
 
     private void SafeLog(string message, Exception exception)
     {

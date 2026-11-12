@@ -8,7 +8,15 @@ namespace Radial.Windows.Tests.Actions;
 /// </summary>
 internal sealed class FakeProcessLauncher : IProcessLauncher
 {
+    private readonly TaskCompletionSource _launched = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public List<ProcessLaunchRequest> Requests { get; } = [];
+
+    /// <summary>
+    /// Se completa al recibir la primera solicitud. Los ejecutores comprueban el destino en el pool antes de pedir el lanzamiento, así que
+    /// una prueba que mira <see cref="Requests"/> justo después de llamar a <c>ExecuteAsync</c> debe esperar antes a esta tarea.
+    /// </summary>
+    public Task Launched => _launched.Task;
 
     public ProcessLaunchResult Result { get; set; } = ProcessLaunchResult.Started;
 
@@ -26,6 +34,7 @@ internal sealed class FakeProcessLauncher : IProcessLauncher
     public Task<ProcessLaunchResult> LaunchAsync(ProcessLaunchRequest request, CancellationToken cancellationToken = default)
     {
         Requests.Add(request);
+        _launched.TrySetResult();
         OnLaunch?.Invoke();
 
         if (ThrowOnLaunch is { } exception)

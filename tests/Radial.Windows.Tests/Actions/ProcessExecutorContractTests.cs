@@ -118,6 +118,7 @@ public class ProcessExecutorContractTests : IClassFixture<TempFileSystem>
 
         var execution = c.Create(launcher).ExecuteAsync(c.Valid);
 
+        await launcher.Launched.WaitAsync(TimeSpan.FromSeconds(10)); // la comprobación del destino va en el pool
         Assert.Single(launcher.Requests); // ya se pidió el lanzamiento...
         Assert.False(execution.IsCompleted); // ...pero no se da por hecho
 
