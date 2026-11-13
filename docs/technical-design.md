@@ -1,4 +1,4 @@
-# Radial — Documento técnico v0.26
+# Radial — Documento técnico v0.28
 
 Estado: **Fase 6 (biblioteca de acciones y editor radial): implementada, con CI en verde (`abca8b2`, ejecución nº 14) y sin validar a mano (19.1); las fases 4 y 5 siguen sin estar aprobadas manualmente.** **Fases 0, 1, 2 y 3 cerradas** (la fase 3 aprobada tras la validación manual con hardware y la auditoría final; limitaciones sin validar en 16.12). La fase 2 se cerró con cobertura parcial (sección 10, [ADR-001](adr/ADR-001-overlay-rendering.md)). **Fase 4 (overlay real y acciones): implementada, con validación automática confirmada y con validación manual básica parcial; NO está aprobada manualmente.** El commit `d4b3f8a` (que incluye la 4.1, la 4.2, el cierre técnico I1–I6, la protección de navegación y el fallo seguro del lector) pasó el workflow de GitHub Actions: ejecución nº 4, <https://github.com/xrbrr24/Radial/actions/runs/41900198820>, estado verde verificado en la API de GitHub; las cifras 694 Core / 992 Windows las comunicó el usuario y no son comprobables sin autenticación (15.5). Siguen **aplazadas** las pruebas manuales P1, P3–P6 y P9, el cierre sin procesos colgados y todo lo de DPI, varios monitores, bordes y 25H2 (17.11, 17.12). **Fase 5 (submenús en el overlay, configuración persistente en JSON, bandeja): implementada; compilación y pruebas automáticas en verde en CI (commit `1772b59`, ejecución nº 7, <https://github.com/xrbrr24/Radial/actions/runs/42001660093>, estado verde verificado en la API; cifras por suite sin comprobar), y no se ha probado a mano** (sección 18). Todo lo demás (fases 6, 7 y 8) sigue siendo diseño.
 
@@ -8,6 +8,7 @@ Convención: **[Comprobado]** = verificado con documentación oficial o en este 
 
 | Versión | Cambios |
 |---|---|
+| **v0.28** | **Acciones útiles además de atajos y versión portátil** (sección 21). Cuatro capacidades de punta a punta (modelo, `config.json`, validación, editor, dibujo en el radial, ejecución sin bloquear la interfaz): **insertar texto** (`TypeTextAction`, entrada Unicode `KEYEVENTF_UNICODE`, sin portapapeles), **volumen** (`VolumeAction`, Windows Core Audio: subir, bajar, fijar nivel, alternar silencio), **controlar la ventana activa** (`WindowControlAction`: minimizar, maximizar, restaurar, cerrar; nunca Radial, el escritorio ni la barra de tareas) y **argumentos y directorio de trabajo de «iniciar aplicación»** (`LaunchApplicationAction.Arguments` pasa de texto a LISTA, `ProcessStartInfo.ArgumentList`; el formato antiguo de texto se sigue leyendo). Ejemplo en `docs/examples/config-acciones-nuevas.json`. Publicación autocontenida de archivo único (`tools/publish-portable.ps1`) y trabajo `portable` de CI que solo corre tras `validate`. Pruebas escritas y sin ejecutar en el equipo de desarrollo (15.5); sin validar a mano (21.9). |
 | **v0.27** | **Corrección de alcance antes de fusionar la fase 6.** Se retiran de la entrega funciones de la fase 7 que no estaban aprobadas: instancia única (`SingleInstance`: mutex, tubería y activación de otra instancia), autoarranque (`StartupRegistration`, opción «Iniciar con Windows» en Ajustes), arranque oculto (`--background`) y `WindowPlacementStore` (código sin uso). **Siguen pendientes de la fase 7.** Los fallos de **acciones** dejan de avisarse por la bandeja: se registran en disco (`ErrorReporter.RecordProblem`) y se dicen dentro de la ventana, como antes de la entrega (20.2, 20.7 y 20.8). Se conserva el sistema de avisos (`NotificationRouter`, canales, limitador) para los errores de arranque, configuración, captura y de la propia aplicación, y `BuildIdentity`. |
 | **v0.26** | **El seguimiento entre monitores no se activaba en la aplicación real.** Causa: `CaptureHost` construía `RadialOverlayCoordinator` sin el `IMonitorLocator` (parámetro opcional, nulo), así que `FollowMonitor` retornaba siempre; las pruebas y `--edge-check` lo construían con él. Corrección: `RadialOverlayCoordinatorFactory` (única composición de producción, usada también por `--edge-check`), diagnóstico `FollowTrace` («[monitores]» en Diagnóstico) y `PointerPacking` (posición del hook con signo, probada con coordenadas negativas). Pruebas escritas y sin ejecutar (15.5); sin validar a mano. |
 | **v0.25** | **El radial sigue al cursor entre monitores** (6.4). `IMonitorLocator`, `MonitorFollow` (regla pura con histéresis de 12 DIP), `IRadialPresenter.FollowCursor` y `OverlayWindowInterop.FollowCursor` (monitor del cursor, DPI recalculado, desfase en DIP). Con desplazamiento forzado por el borde, la selección se suspende hasta que el cursor se mueve (nunca un salto de sector). `--edge-check` recorre ahora los cruces reales en ambos sentidos. Pruebas escritas y sin ejecutar (15.5); DPI distintos solo probados con monitores falsos; sin validar a mano. |
@@ -232,8 +233,9 @@ Redibujado solo desde `CompositionTarget.Rendering`. Referencia del spike (varia
 
 `IActionExecutor` por tipo, resueltos por discriminador en un registro. Añadir un tipo es una clase más y un registro.
 
-- **App, archivo, carpeta, URL:** `Process.Start` con `UseShellExecute=true`; nunca por `cmd`. Argumentos y directorio de trabajo.
+- **App, archivo, carpeta, URL:** `Process.Start` con `UseShellExecute=true`; nunca por `cmd`. Argumentos (lista, `ArgumentList`) y directorio de trabajo.
 - **Teclado:** `SendInput` con la política de la sección 3.4.
+- **Texto, volumen y ventana activa:** ver la sección 21.
 - Los errores no tumban la app y se notifican. Iconos: glifo de Segoe Fluent Icons, o extraído de un ejecutable con la API del shell.
 
 ## 9. Pruebas
@@ -1485,3 +1487,78 @@ Origen del error ──▶ ErrorReporter.Report / ReportProblem ──▶ 1 clas
 - El registro no está cifrado ni se envía a ningún sitio (sin telemetría): es local; el usuario decide si lo comparte.
 - Los hilos de los hooks (`LowLevelHookBase`) siguen sin registrar por sí mismos (callbacks mínimos): se revisan sus contadores desde `CheckHealth` cada 5 s.
 - Se han dejado sin cambiar los `catch` vacíos documentados de la fase 3 (`GestureEventReader`, `GestureReaderSupervisor`): su fallo ya llega al sistema por otros caminos y no tienen acceso al registro sin tocar los hooks.
+
+## 21. Acciones útiles además de atajos y versión portátil (v0.28)
+
+### 21.1 Estado: implementado; compilación y publicación correctas en el equipo de desarrollo; pruebas escritas y SIN ejecutar allí; sin validar a mano
+
+| Qué | Estado |
+|---|---|
+| Código (`Radial.Core/Model`, `Storage/ActionJson`, `Radial.Windows/{TextInput,Audio,WindowControl}`, formulario del editor, `Radial.App`) | **Implementado** |
+| `dotnet build src/Radial.App/Radial.App.csproj -c Release` | **Correcto, 0 advertencias y 0 errores** (13-nov-2026) |
+| `tools/publish-portable.ps1` (mismo comando, ejecutado a mano) | **Correcto, 0 advertencias**: un único `Radial.App.exe` de unos 72 MiB |
+| `Radial.App.exe --config-check` sobre el `.exe` publicado con `docs/examples/config-acciones-nuevas.json` | **Correcto**: 9 acciones, los cuatro tipos nuevos reconocidos, sin avisos |
+| `Radial.App.exe --render-ui` sobre el `.exe` publicado (formularios nuevos dibujados fuera de pantalla) | **Correcto** (WPF funciona dentro del archivo único) |
+| Pruebas nuevas (Core y Windows) | **Escritas; no se compilan ni se ejecutan en el equipo de desarrollo (Smart App Control, 15.5).** Las valida CI |
+| Ejecución real (texto escrito en otra aplicación, volumen de Windows, cerrar una ventana ajena) | **Sin probar a mano** (21.9) |
+
+### 21.2 Modelo y `config.json`
+
+Los tres tipos nuevos son acciones de la biblioteca como las demás (`actions` + `actionId`), con su categoría e icono por defecto, y se dibujan en el radial como cualquier otra. `schemaVersion` sigue en 2 (los campos son aditivos).
+
+| `type` | Campos | Reglas (`GetProblems()`, única fuente) |
+|---|---|---|
+| `typeText` | `text` | 1–1000 caracteres; se admiten saltos de línea (`\r\n`, `\n`, `\r`) y tabuladores; se rechazan los demás caracteres de control (incluido `\0`) y los pares sustitutos incompletos. |
+| `volume` | `operation` (`increase`, `decrease`, `setLevel`, `toggleMute`), `percent` | `increase`/`decrease`: diferencia 1–100; `setLevel`: nivel 0–100; `toggleMute` no usa número (no se escribe). |
+| `windowControl` | `operation` (`minimize`, `maximize`, `restore`, `close`) | Operación conocida. |
+| `launchApplication` | `path`, `arguments` (**lista de textos**), `workingDirectory` | Como antes, más: como máximo 64 argumentos, 8192 caracteres cada uno y 30 000 en total; sin `\0` ni elementos nulos. |
+
+- **Argumentos como lista.** `LaunchApplicationAction.Arguments` era un texto y ahora es `IReadOnlyList<string>`: cada elemento llega al programa tal cual, sin comillas que escribir y sin intérprete de comandos. La igualdad del `record` compara elemento a elemento (`null` y lista vacía son «sin argumentos»). **Compatibilidad:** un `config.json` con `"arguments": "--x \"y z\""` (texto) se sigue leyendo y se divide con las reglas de `CommandLineToArgvW` (`CommandLineArguments.Split`, solo traduce); al guardar se reescribe como lista. Un tipo JSON equivocado (número, objeto, un elemento que no es texto) es un error ESTRUCTURAL y el archivo va a cuarentena como siempre.
+- **Operación desconocida o número fuera de rango** (`"operation": "explode"`, `percent: 500`): no es un error de lectura; la validación del modelo lo señala y la carga tolerante la neutraliza (`UnknownAction` con su JSON íntegro, aviso `config.action-neutralized`, colocaciones enlazadas), igual que cualquier otra acción inválida (5/6).
+- **Los mensajes y el registro nunca repiten el texto** de `typeText` (puede ser una contraseña o datos personales). Aun así queda en `config.json` en claro: el formulario lo dice y no es lugar para secretos.
+
+### 21.3 Insertar texto (`TypeTextActionExecutor`)
+
+Orden fijo, el de los atajos (3.4, 17.x): tipo → cancelado → `GetProblems()` → hay ventana en primer plano → espera a que se suelten los cuatro modificadores físicos (`ModifierReleaseWaiter`, extraído del ejecutor de atajos y compartido; mismo tiempo de espera y mismo criterio) → la ventana en primer plano sigue siendo la misma → UNA llamada a `SendInput` con todo el texto. Códigos: `InvalidAction`, `ForegroundChanged`, `ModifiersNotReleased`, `InputInjectionFailed`, `KeyReleaseFailed`.
+
+- **Sin portapapeles.** Cada unidad UTF-16 va como `KEYEVENTF_UNICODE` (pulsar y soltar, `wVk = 0`, el carácter en `wScan`): no depende de la distribución del teclado ni de los modificadores; los pares sustitutos se envían unidad a unidad, como documenta Windows. Un salto de línea es UNA pulsación de Intro y un tabulador, una de Tab (muchas aplicaciones ignoran esas teclas si llegan como carácter Unicode). `KeyboardEvent` ganó un campo aditivo `Unicode`; `ShortcutSequence.ReleasesFor` distingue una tecla virtual de un carácter Unicode con el mismo código.
+- **Mismo inyector que los atajos** (`SendInputKeyboardInjector`, sin la marca de la autoprueba: los hooks descartan sus eventos por inyectados). Si Windows acepta solo parte del texto, se suelta lo pulsado y se informa («puede que se haya escrito solo una parte»); no se reintenta el envío.
+- **Límites sin solución:** aplicación de destino elevada (UIPI: Windows descarta la entrada sin avisar; el éxito significa «Windows aceptó la entrada», no «la aplicación la procesó»); aplicaciones que filtran la entrada Unicode (algunos juegos, escritorios remotos y máquinas virtuales); 1000 caracteres como tope para que una sola llamada no ocupe un tiempo apreciable.
+
+### 21.4 Volumen (`VolumeActionExecutor`)
+
+Windows Core Audio sobre el dispositivo de salida PREDETERMINADO (rol multimedia): `IMMDeviceEnumerator` → `IMMDevice.Activate` → `IAudioEndpointVolume`, interfaces COM declaradas a mano (`CoreAudioEndpointProvider`, sin paquetes, sin teclas multimedia, sin mezclador ni diálogos). Cada ejecución abre el dispositivo y lo libera al terminar (el predeterminado puede cambiar en cualquier momento). Se hace **en el pool**, no en el hilo de interfaz (COM con el servicio de audio ocupado puede tardar).
+
+- Subir/bajar: nivel actual (entero 0–100, redondeado) ± diferencia, acotado a 0–100; **subir** también quita el silencio. Fijar: el nivel indicado; si es > 0 y había silencio, lo quita (0 no). Alternar silencio: invierte el silencio sin tocar el nivel.
+- Códigos: `AudioUnavailable` (no hay dispositivo, se desconectó o el servicio de audio no responde: `E_NOTFOUND`, `AUDCLNT_E_DEVICE_INVALIDATED`, `AUDCLNT_E_SERVICE_NOT_RUNNING`), `AudioControlFailed` (Windows rechazó la operación). Los mensajes no incluyen nombres de dispositivo.
+- El orden de los métodos de las interfaces COM es el de `mmdeviceapi.h` y `endpointvolume.h`: un error ahí no lo detecta el compilador ni las pruebas con dispositivo falso. **Es lo primero que hay que comprobar a mano** (21.9).
+
+### 21.5 Controlar la ventana activa (`WindowControlActionExecutor`)
+
+El destino es la ventana con el foco al ejecutar (el overlay no se activa, así que sigue siendo la que había debajo). Se rechaza con `WindowNotAvailable` si no hay ninguna, ya no existe, no es visible, **pertenece al proceso de Radial** (centro de control, overlay, diálogos: se compara el identificador de proceso) o es el escritorio o una barra de tareas (clases `Progman`, `WorkerW`, `Shell_TrayWnd`, `Shell_SecondaryTrayWnd`). Se vuelve a comprobar justo antes de actuar. Una operación que no procede (minimizar lo minimizado, maximizar lo maximizado, restaurar lo que ya tiene tamaño normal, ventana sin botón de minimizar o maximizar) da `WindowOperationNotSupported`; cerrar se permite siempre.
+
+- Se pide con `WM_SYSCOMMAND` (`SC_MINIMIZE`, `SC_MAXIMIZE`, `SC_RESTORE`, `SC_CLOSE`) por `PostMessage`: lo mismo que hacen los botones de la barra de título, la ventana decide y **no se espera a que responda** (una ventana colgada no bloquea a Radial). **Cerrar es un cierre normal:** la aplicación puede preguntar si guardar; no se mata ningún proceso.
+- Proceso elevado: Windows (UIPI) rechaza el mensaje con «acceso denegado» y se informa (`WindowOperationFailed`, mensaje sin nombre de programa ni título de ventana).
+- Todo el trabajo va en el pool; el éxito significa «Windows aceptó la orden», no «la aplicación la atendió».
+
+### 21.6 Iniciar aplicación con argumentos y directorio de trabajo
+
+`ProcessLaunchRequest.Arguments` es la lista; `ShellProcessLauncher.CreateStartInfo` la copia a `ProcessStartInfo.ArgumentList` (nunca se compone una línea ni se pasa por `cmd`/PowerShell; `UseShellExecute` sigue en `true`). **Comprobado en el código fuente del runtime** (`SafeProcessHandle.Windows.cs`, `StartWithShellExecute`): los parámetros de `ShellExecuteEx` salen de `startInfo.BuildArguments()`, que incluye `ArgumentList`, y no se rechaza con `UseShellExecute`. **No se ha ejecutado:** Smart App Control bloqueó (`0x800711C7`) el programa de comprobación que se compiló para ello y, según 15.5, no se insiste. El entrecomillado lo hace .NET con las reglas de `CommandLineToArgvW`; un programa que interprete su línea de comandos de otra manera verá otra cosa (límite del programa, no de Radial).
+
+**Formulario.** «Argumentos (uno por línea)»: las líneas vacías se ignoran y cada línea se recorta; un argumento con espacios va en una sola línea. Un argumento con saltos de línea (solo posible editando `config.json`) no se puede escribir en este formulario: guardar queda bloqueado con una explicación hasta que se edite o borre el campo, para no alterarlo en silencio.
+
+### 21.7 Editor, biblioteca y radial
+
+`ActionKind` ganó `Text`, `Volume` y `Window`; «Nueva acción» ofrece «Insertar texto», «Volumen» y «Ventana activa» (también la paleta de comandos y el filtro por tipo). `ActionFormViewModel` valida el número en el propio formulario (entero 0–100 o 1–100, mensaje por operación) y deja el resto a `GetProblems()`. `UiText.Summary` describe cada acción en una línea (el texto se acorta a 40 caracteres y los saltos de línea se muestran como «↵»). La búsqueda de la biblioteca encuentra el texto de una acción de insertar texto y los argumentos de una aplicación. `ActionExecutors.Create` registra los tres ejecutores en el `CompositeActionExecutor`.
+
+### 21.8 Versión portátil
+
+- **Comando (única definición, `tools/publish-portable.ps1`):** `dotnet publish src/Radial.App/Radial.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false`. Salida local: `artifacts\portable\win-x64\Radial.App.exe` (`artifacts\` está excluido de Git). Sin recorte (WPF no lo admite de forma segura).
+- **Sin firmar.** No es un instalador y no se firma (fase 8). Un `.exe` sin firmar puede ser bloqueado por Smart App Control (15) o avisado por SmartScreen; **que se ejecute aquí no demuestra que se ejecute en otro equipo**. Las bibliotecas nativas de WPF se extraen la primera vez en una carpeta temporal del usuario (`IncludeNativeLibrariesForSelfExtract`).
+- **Identidad de la compilación en archivo único:** `Assembly.Location` está vacío dentro de un archivo único; `BuildIdentity` usa entonces `Environment.ProcessPath` (la fecha que se muestra es la del `.exe`).
+- **CI (`.github/workflows/radial-windows-validation.yml`, trabajo `portable`):** `needs: validate`, así que solo corre si la compilación de la solución y las dos suites pasaron. Publica con el mismo script, comprueba que el `.exe` publicado arranca (`--config-check` sobre una carpeta temporal con el ejemplo de configuración: debe cargar 1 acción de texto, 4 de volumen, 3 de ventana y 1 aplicación), calcula el SHA-256 y sube el artefacto `radial-portable-win-x64` (`Radial.App.exe` y `Radial.App.exe.sha256`, 30 días). Descarga: pestaña Actions del repositorio → ejecución → «Artifacts» (requiere sesión en GitHub), o `gh run download <id> -n radial-portable-win-x64`.
+- `Radial.App.exe --config-check <informe.txt> --root <carpeta>` (herramienta de desarrollo y de comprobación): carga o crea `config.json` en `<carpeta>`, la recarga y escribe un informe; sin hooks, sin ventanas, sin acciones. `--root` es obligatorio: nunca usa la configuración personal.
+
+### 21.9 Pendiente de validar a mano
+
+Ninguna de las cuatro acciones se ha ejecutado contra Windows real. En orden de riesgo: (1) volumen (orden de los métodos COM); (2) texto en un editor normal, con tildes, ñ, símbolos, un emoji y un salto de línea, y que no se pegue el Ctrl del gesto; (3) minimizar, maximizar, restaurar y cerrar sobre una ventana ajena, y que nunca actúe sobre Radial; (4) una aplicación con argumentos con espacios; (5) el `.exe` portátil en otro equipo (Smart App Control o SmartScreen pueden bloquearlo). Los fallos de estas acciones se dicen dentro de la ventana de Radial (Diagnóstico) y se registran en disco, no por la bandeja (v0.27).
