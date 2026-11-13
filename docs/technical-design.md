@@ -1499,7 +1499,7 @@ Origen del error ──▶ ErrorReporter.Report / ReportProblem ──▶ 1 clas
 | `tools/publish-portable.ps1` (mismo comando, ejecutado a mano) | **Correcto, 0 advertencias**: un único `Radial.App.exe` de unos 72 MiB |
 | `Radial.App.exe --config-check` sobre el `.exe` publicado con `docs/examples/config-acciones-nuevas.json` | **Correcto**: 9 acciones, los cuatro tipos nuevos reconocidos, sin avisos |
 | `Radial.App.exe --render-ui` sobre el `.exe` publicado (formularios nuevos dibujados fuera de pantalla) | **Correcto** (WPF funciona dentro del archivo único) |
-| Pruebas nuevas (Core y Windows) | **Escritas; no se compilan ni se ejecutan en el equipo de desarrollo (Smart App Control, 15.5).** Las valida CI |
+| Pruebas nuevas (Core y Windows) | **Escritas; no se compilan ni se ejecutan en el equipo de desarrollo (Smart App Control, 15.5).** Las valida CI: **ejecución nº 21 sobre `63223a7`, en verde** (compilación de la solución, Core, Windows y trabajo `portable`; <https://github.com/xrbrr24/Radial/actions/runs/43412919169>; estado verificado en la API de GitHub, cifras por suite sin comprobar). La nº 20 (`ef2825a`) falló solo en la prueba de guarda del número de códigos de error (11 → 16) y se corrigió sin tocar el producto |
 | Ejecución real (texto escrito en otra aplicación, volumen de Windows, cerrar una ventana ajena) | **Sin probar a mano** (21.9) |
 
 ### 21.2 Modelo y `config.json`
