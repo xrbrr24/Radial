@@ -30,6 +30,11 @@ public class LaunchErrorCodesTests
             ActionErrorCodes.InputInjectionFailed,
             ActionErrorCodes.KeyReleaseFailed,
             ActionErrorCodes.TargetNotAllowed,
+            ActionErrorCodes.AudioUnavailable,
+            ActionErrorCodes.AudioControlFailed,
+            ActionErrorCodes.WindowNotAvailable,
+            ActionErrorCodes.WindowOperationNotSupported,
+            ActionErrorCodes.WindowOperationFailed,
             ActionErrorCodes.UnexpectedError,
         };
 
@@ -41,7 +46,7 @@ public class LaunchErrorCodesTests
     {
         var fields = typeof(ActionErrorCodes).GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!).ToList();
 
-        Assert.Equal(11, fields.Count); // si se añade un código, esta prueba obliga a revisar la lista de arriba
+        Assert.Equal(16, fields.Count); // si se añade un código, esta prueba obliga a revisar la lista de arriba
         Assert.All(fields, code => Assert.Equal(code, ActionExecutionResult.Failure(code, "Mensaje.").Error!.Code));
     }
 }
