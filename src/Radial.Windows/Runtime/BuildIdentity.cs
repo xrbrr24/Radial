@@ -5,8 +5,8 @@ namespace Radial.Windows.Runtime;
 
 /// <summary>
 /// Qué compilación de Radial se está ejecutando: la fecha de compilación (la de escritura del ensamblado principal) y su carpeta. Existe
-/// porque una instancia de Radial puede seguir en ejecución (bandeja) con una compilación antigua mientras se prueba otra: la instancia
-/// única hace que abrir la nueva solo traiga al frente la vieja, y los síntomas parecen un fallo del código nuevo. Se muestra en el título
+/// porque una instancia de Radial puede seguir en ejecución (bandeja) con una compilación antigua mientras se prueba otra (Radial aún no
+/// tiene instancia única), y los síntomas parecen un fallo del código nuevo. Se muestra en el título
 /// de la ventana, en el texto de la bandeja y en el registro. Formateo puro: lo único que toca el disco es <see cref="ForAssembly"/>.
 /// </summary>
 public static class BuildIdentity
@@ -25,13 +25,31 @@ public static class BuildIdentity
         ArgumentNullException.ThrowIfNull(assembly);
         try
         {
-            var location = assembly.Location;
+            var location = LocationOf(assembly);
             return string.IsNullOrEmpty(location) || !File.Exists(location) ? Unknown : FormatStamp(File.GetLastWriteTime(location));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             return Unknown;
         }
+    }
+
+    /// <summary>
+    /// Dónde está en disco el archivo del ensamblado. En una aplicación de ARCHIVO ÚNICO (la versión portátil) los ensamblados van dentro
+    /// del ejecutable y <c>Assembly.Location</c> devuelve cadena vacía: entonces el archivo que cuenta es el propio ejecutable
+    /// (<see cref="Environment.ProcessPath"/>). Un ensamblado dinámico no tiene archivo.
+    /// </summary>
+    private static string? LocationOf(Assembly assembly)
+    {
+        if (assembly.IsDynamic)
+        {
+            return null;
+        }
+
+#pragma warning disable IL3000 // Se comprueba a propósito: vacío en archivo único, y entonces se usa el ejecutable.
+        var location = assembly.Location;
+#pragma warning restore IL3000
+        return string.IsNullOrEmpty(location) ? Environment.ProcessPath : location;
     }
 
     /// <summary>Título de la ventana principal.</summary>
@@ -54,7 +72,7 @@ public static class BuildIdentity
         ArgumentNullException.ThrowIfNull(assembly);
         try
         {
-            var location = assembly.Location;
+            var location = LocationOf(assembly);
             return string.IsNullOrEmpty(location) ? null : Path.GetDirectoryName(location);
         }
         catch (Exception exception) when (exception is NotSupportedException or ArgumentException or PathTooLongException)

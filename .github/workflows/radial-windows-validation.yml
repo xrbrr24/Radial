@@ -136,3 +136,65 @@ jobs:
           path: ${{ runner.temp }}/test-results/windows
           if-no-files-found: warn
           retention-days: 14
+
+  # Version portatil: un unico Radial.App.exe autocontenido (win-x64, con el runtime de .NET dentro; no hace falta instalar nada).
+  # Solo se genera cuando el trabajo "validate" termino bien: la solucion compilo y pasaron las dos suites. Sin firmar (la firma
+  # digital y el instalador estan fuera de alcance). Un exe sin firmar puede ser bloqueado por Smart App Control o SmartScreen.
+  portable:
+    name: Publicar version portatil (Windows x64, archivo unico)
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar el SDK de .NET indicado en global.json
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Misma definicion del comando que usa el desarrollador en local (tools/publish-portable.ps1).
+      - name: Publicar (archivo unico, autocontenido, win-x64)
+        shell: pwsh
+        run: ./tools/publish-portable.ps1 -Output "${{ runner.temp }}/radial-portable/win-x64"
+
+      # Comprobacion de arranque del ejecutable publicado: --config-check carga (y crea) la configuracion en una carpeta temporal,
+      # la recarga y escribe un informe. No instala hooks, no abre ventanas, no ejecuta acciones y no toca ninguna configuracion
+      # personal. Es un programa de ventanas: hay que esperarlo explicitamente.
+      - name: Comprobar que el ejecutable arranca y carga la configuracion de ejemplo
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'radial-portable/win-x64/Radial.App.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'portable-check'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Copy-Item -LiteralPath 'docs/examples/config-acciones-nuevas.json' -Destination (Join-Path $root 'config.json')
+          $report = Join-Path $env:RUNNER_TEMP 'portable-report.txt'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--config-check', "`"$report`"", '--root', "`"$root`"") -Wait -PassThru
+          if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Radial.App.exe --config-check termino con el codigo $($process.ExitCode)." }
+          $text = Get-Content -LiteralPath $report -Raw
+          foreach ($expected in 'actionType TypeTextAction=1', 'actionType VolumeAction=4', 'actionType WindowControlAction=3', 'actionType LaunchApplicationAction=1') {
+            if (-not $text.Contains($expected)) { throw "El informe no contiene '$expected'." }
+          }
+
+      - name: Calcular la suma SHA-256
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'radial-portable/win-x64'
+          $hash = (Get-FileHash -LiteralPath (Join-Path $dir 'Radial.App.exe') -Algorithm SHA256).Hash
+          "$hash  Radial.App.exe" | Out-File -FilePath (Join-Path $dir 'Radial.App.exe.sha256') -Encoding ascii
+          "## Version portatil`n`n- Archivo: ``Radial.App.exe`` (win-x64, archivo unico, sin firmar)`n- SHA-256: ``$hash```n- Commit: ``${{ github.sha }}``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Subir la version portatil
+        uses: actions/upload-artifact@v7
+        with:
+          name: radial-portable-win-x64
+          path: |
+            ${{ runner.temp }}/radial-portable/win-x64/Radial.App.exe
+            ${{ runner.temp }}/radial-portable/win-x64/Radial.App.exe.sha256
+          if-no-files-found: error
+          retention-days: 30

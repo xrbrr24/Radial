@@ -25,6 +25,8 @@ public partial class App : Application
     //                                         de overlay, sin hooks, sin entrada)
     //   Radial.App.exe --render-ui <carpeta>  dibuja el centro de control (editor, biblioteca, ajustes, diálogo) en PNG y cierra
     //                                         (herramienta de desarrollo: sin hooks, sin entrada, sin tocar el disco)
+    //   Radial.App.exe --config-check <txt> --root <carpeta>   carga (o crea) config.json en <carpeta>, la recarga y escribe un informe;
+    //                                         nunca usa la configuración personal (sin hooks, sin ventanas, sin acciones)
     //   Radial.App.exe --edge-check <txt>     recorre la ruta real del radial (coordinador + ventana) en los bordes y esquinas de cada
     //                                         monitor y escribe lo que mide Windows (sin hooks, sin entrada, sin mover el cursor)
     //   Radial.App.exe --overlay-check <txt> [--at x,y]  muestra el overlay real un instante sobre el cursor (o en x,y), escribe los estilos de la
@@ -63,6 +65,13 @@ public partial class App : Application
                 Shutdown(1);
             }
 
+            return;
+        }
+
+        var configCheck = ValueOf(e.Args, "--config-check");
+        if (configCheck is not null)
+        {
+            Shutdown(ConfigCheck.Run(configCheck, ValueOf(e.Args, "--root")));
             return;
         }
 
