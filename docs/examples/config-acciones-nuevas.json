@@ -12,29 +12,37 @@
   },
   "actions": [
     {
-      "id": "texto.firma",
-      "name": "Firma",
-      "description": "Escribe una firma de dos líneas en la aplicación activa.",
+      "id": "texto.prueba",
+      "name": "Texto de prueba",
+      "description": "Escribe un texto con tildes, ñ, un emoji y un salto de línea en la aplicación activa.",
       "category": "editing",
-      "tags": ["texto", "correo"],
+      "tags": ["texto", "prueba"],
       "icon": { "source": "glyph", "value": "Keyboard" },
-      "action": { "type": "typeText", "text": "Un saludo,\r\nAna" }
+      "action": { "type": "typeText", "text": "Prueba de Radial: ñandú, canción, ¿qué tal? ¡Sí! \ud83d\ude00\r\nSegunda línea: añadir, pingüino, Ñ." }
     },
     {
       "id": "volumen.subir",
       "name": "Subir volumen",
-      "description": "Sube el volumen del dispositivo de salida 5 puntos.",
+      "description": "Sube el volumen del dispositivo de salida 10 puntos.",
       "category": "multimedia",
       "icon": { "source": "glyph", "value": "VolumeUp" },
-      "action": { "type": "volume", "operation": "increase", "percent": 5 }
+      "action": { "type": "volume", "operation": "increase", "percent": 10 }
     },
     {
       "id": "volumen.bajar",
       "name": "Bajar volumen",
-      "description": "Baja el volumen del dispositivo de salida 5 puntos.",
+      "description": "Baja el volumen del dispositivo de salida 10 puntos.",
       "category": "multimedia",
       "icon": { "source": "glyph", "value": "VolumeDown" },
-      "action": { "type": "volume", "operation": "decrease", "percent": 5 }
+      "action": { "type": "volume", "operation": "decrease", "percent": 10 }
+    },
+    {
+      "id": "volumen.fijar",
+      "name": "Volumen al 30 %",
+      "description": "Fija el volumen en el 30 %.",
+      "category": "multimedia",
+      "icon": { "source": "glyph", "value": "VolumeUp" },
+      "action": { "type": "volume", "operation": "setLevel", "percent": 30 }
     },
     {
       "id": "volumen.silencio",
@@ -43,14 +51,6 @@
       "category": "multimedia",
       "icon": { "source": "glyph", "value": "Mute" },
       "action": { "type": "volume", "operation": "toggleMute" }
-    },
-    {
-      "id": "volumen.medio",
-      "name": "Volumen al 40 %",
-      "description": "Fija el volumen en el 40 %.",
-      "category": "multimedia",
-      "icon": { "source": "glyph", "value": "VolumeUp" },
-      "action": { "type": "volume", "operation": "setLevel", "percent": 40 }
     },
     {
       "id": "ventana.minimizar",
@@ -69,9 +69,17 @@
       "action": { "type": "windowControl", "operation": "maximize" }
     },
     {
+      "id": "ventana.restaurar",
+      "name": "Restaurar",
+      "description": "Devuelve la ventana activa, si está maximizada, a su tamaño normal.",
+      "category": "system",
+      "icon": { "source": "glyph", "value": "TaskView" },
+      "action": { "type": "windowControl", "operation": "restore" }
+    },
+    {
       "id": "ventana.cerrar",
       "name": "Cerrar ventana",
-      "description": "Cierra la ventana activa (la aplicación puede preguntar si guardar).",
+      "description": "Cierra la ventana activa (la aplicación puede preguntar si guardar). Guarda antes tu trabajo.",
       "category": "system",
       "icon": { "source": "glyph", "value": "Close" },
       "action": { "type": "windowControl", "operation": "close" }
@@ -79,13 +87,13 @@
     {
       "id": "app.bloc-de-notas",
       "name": "Bloc de notas con archivo",
-      "description": "Abre un archivo concreto en el Bloc de notas: el programa recibe cada argumento tal cual.",
+      "description": "Abre en el Bloc de notas el archivo C:\\Temp\\prueba radial.txt (créalo antes): el nombre lleva un espacio y llega al programa como UN solo argumento.",
       "category": "applications",
       "icon": { "source": "glyph", "value": "Application" },
       "action": {
         "type": "launchApplication",
         "path": "notepad.exe",
-        "arguments": ["C:\\Windows\\win.ini"],
+        "arguments": ["C:\\Temp\\prueba radial.txt"],
         "workingDirectory": "C:\\Windows"
       }
     }
@@ -95,14 +103,42 @@
       "id": "main",
       "name": "Principal",
       "items": [
-        { "id": "main.firma", "position": "North", "actionId": "texto.firma" },
-        { "id": "main.mas", "position": "NorthEast", "actionId": "volumen.subir" },
-        { "id": "main.menos", "position": "East", "actionId": "volumen.bajar" },
-        { "id": "main.silencio", "position": "SouthEast", "actionId": "volumen.silencio" },
-        { "id": "main.minimizar", "position": "South", "actionId": "ventana.minimizar" },
-        { "id": "main.maximizar", "position": "SouthWest", "actionId": "ventana.maximizar" },
-        { "id": "main.cerrar", "position": "West", "actionId": "ventana.cerrar" },
-        { "id": "main.notas", "position": "NorthWest", "actionId": "app.bloc-de-notas" }
+        { "id": "main.texto", "position": "North", "actionId": "texto.prueba" },
+        {
+          "id": "main.volumen",
+          "name": "Volumen",
+          "position": "East",
+          "icon": { "source": "glyph", "value": "VolumeUp" },
+          "action": { "type": "openMenu", "targetMenuId": "volumen" }
+        },
+        {
+          "id": "main.ventana",
+          "name": "Ventana",
+          "position": "South",
+          "icon": { "source": "glyph", "value": "TaskView" },
+          "action": { "type": "openMenu", "targetMenuId": "ventana" }
+        },
+        { "id": "main.notas", "position": "West", "actionId": "app.bloc-de-notas" }
+      ]
+    },
+    {
+      "id": "volumen",
+      "name": "Volumen",
+      "items": [
+        { "id": "volumen.mas", "position": "North", "actionId": "volumen.subir" },
+        { "id": "volumen.fijo", "position": "East", "actionId": "volumen.fijar" },
+        { "id": "volumen.menos", "position": "South", "actionId": "volumen.bajar" },
+        { "id": "volumen.mute", "position": "West", "actionId": "volumen.silencio" }
+      ]
+    },
+    {
+      "id": "ventana",
+      "name": "Ventana",
+      "items": [
+        { "id": "ventana.max", "position": "North", "actionId": "ventana.maximizar" },
+        { "id": "ventana.rest", "position": "East", "actionId": "ventana.restaurar" },
+        { "id": "ventana.min", "position": "South", "actionId": "ventana.minimizar" },
+        { "id": "ventana.cierra", "position": "West", "actionId": "ventana.cerrar" }
       ]
     }
   ]

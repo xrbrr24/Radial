@@ -35,25 +35,68 @@ public class ExampleConfigurationTests
     }
 
     [Fact]
-    public void TheExample_ContainsEveryNewKindOfAction_AndFillsTheEightSectors()
+    public void TheExample_ContainsEveryNewKindOfAction_WithTheDataTheManualTestNeeds()
     {
         var configuration = ConfigurationFile.Parse(File.ReadAllText(ExamplePath())).Configuration!;
         var actions = configuration.Actions.Select(a => a.Action).ToList();
 
-        Assert.Single(actions.OfType<TypeTextAction>());
+        // El texto de prueba lleva tildes, ñ, un emoji (par sustituto) y un salto de línea.
+        var text = Assert.Single(actions.OfType<TypeTextAction>()).Text;
+        Assert.Contains('ñ', text);
+        Assert.Contains('Ñ', text);
+        Assert.Contains('é', text);
+        Assert.Contains("\r\n", text);
+        Assert.Contains(text, c => char.IsHighSurrogate(c));
+
         Assert.Equal<VolumeOperation>(
-            new[] { VolumeOperation.Increase, VolumeOperation.Decrease, VolumeOperation.ToggleMute, VolumeOperation.SetLevel },
+            new[] { VolumeOperation.Increase, VolumeOperation.Decrease, VolumeOperation.SetLevel, VolumeOperation.ToggleMute },
             actions.OfType<VolumeAction>().Select(v => v.Operation));
         Assert.Equal<WindowOperation>(
-            new[] { WindowOperation.Minimize, WindowOperation.Maximize, WindowOperation.Close },
+            new[] { WindowOperation.Minimize, WindowOperation.Maximize, WindowOperation.Restore, WindowOperation.Close },
             actions.OfType<WindowControlAction>().Select(w => w.Operation));
-        var launch = Assert.Single(actions.OfType<LaunchApplicationAction>());
-        Assert.Equal<string>(new[] { @"C:\Windows\win.ini" }, launch.Arguments);
 
-        var items = configuration.Menus.Single().Items;
-        Assert.Equal(8, items.Count);
-        Assert.Equal<RadialDirection>(Enum.GetValues<RadialDirection>().Order(), items.Select(i => i.Position).Order());
-        Assert.All(items, item => Assert.False(item.IsUnsupported));
+        // Notepad con UN argumento que contiene un espacio (el archivo temporal que crea el usuario) y sin rutas personales.
+        var launch = Assert.Single(actions.OfType<LaunchApplicationAction>());
+        Assert.Equal("notepad.exe", launch.Path);
+        Assert.Equal<string>(new[] { @"C:\Temp\prueba radial.txt" }, launch.Arguments);
+        Assert.DoesNotContain(@"\Users\", File.ReadAllText(ExamplePath()), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EveryActionOfTheExample_IsReachableFromTheRootRadial_ThroughItsSubmenus()
+    {
+        var configuration = ConfigurationFile.Parse(File.ReadAllText(ExamplePath())).Configuration!;
+        var menus = configuration.Menus.ToDictionary(m => m.Id);
+
+        // Recorrido desde el menú raíz por los grupos (con la profundidad como en el motor: la raíz cuenta).
+        var reachedDefinitions = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<MenuId>();
+        var pending = new Stack<(MenuId Id, int Depth)>();
+        pending.Push((configuration.RootMenuId, 1));
+        while (pending.Count > 0)
+        {
+            var (id, depth) = pending.Pop();
+            Assert.True(depth <= configuration.Navigation.MaxDepth, $"El menú {id.Value} queda a profundidad {depth}.");
+            Assert.True(visited.Add(id), $"El menú {id.Value} se alcanza por dos caminos.");
+            foreach (var item in menus[id].Items)
+            {
+                Assert.False(item.IsUnsupported);
+                if (item.Action is OpenMenuAction group)
+                {
+                    pending.Push((group.TargetMenuId, depth + 1));
+                }
+                else
+                {
+                    reachedDefinitions.Add(Assert.IsType<string>(item.DefinitionId));
+                }
+            }
+        }
+
+        Assert.Equal(menus.Count, visited.Count); // ningún menú queda sin alcanzar
+        Assert.Equal(
+            configuration.Actions.Select(a => a.Id).Order(StringComparer.Ordinal),
+            reachedDefinitions.Order(StringComparer.Ordinal)); // todas las acciones se pueden colocar en un sector y alcanzar
+        Assert.Equal(4, menus[configuration.RootMenuId].Items.Count);
     }
 
     [Fact]
