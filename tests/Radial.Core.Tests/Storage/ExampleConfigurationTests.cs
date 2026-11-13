@@ -55,10 +55,17 @@ public class ExampleConfigurationTests
             new[] { WindowOperation.Minimize, WindowOperation.Maximize, WindowOperation.Restore, WindowOperation.Close },
             actions.OfType<WindowControlAction>().Select(w => w.Operation));
 
-        // Notepad con UN argumento que contiene un espacio (el archivo temporal que crea el usuario) y sin rutas personales.
-        var launch = Assert.Single(actions.OfType<LaunchApplicationAction>());
-        Assert.Equal("notepad.exe", launch.Path);
-        Assert.Equal<string>(new[] { @"C:\Temp\prueba radial.txt" }, launch.Arguments);
+        // Notepad dos veces, siempre con UN solo argumento: el control (un archivo que existe en cualquier Windows) y el archivo
+        // temporal con espacio que crea el usuario. Sin directorio de trabajo fijo y sin rutas personales.
+        var launches = actions.OfType<LaunchApplicationAction>().ToDictionary(a => Assert.Single(a.Arguments!));
+        Assert.Equal(2, launches.Count);
+        Assert.All(launches.Values, launch =>
+        {
+            Assert.Equal("notepad.exe", launch.Path);
+            Assert.Null(launch.WorkingDirectory);
+        });
+        Assert.Contains(@"C:\Windows\win.ini", launches.Keys);
+        Assert.Contains(@"C:\Temp\prueba radial.txt", launches.Keys);
         Assert.DoesNotContain(@"\Users\", File.ReadAllText(ExamplePath()), StringComparison.OrdinalIgnoreCase);
     }
 

@@ -177,7 +177,7 @@ jobs:
           if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report | ForEach-Object { Write-Host $_ } }
           if ($process.ExitCode -ne 0) { throw "Radial.App.exe --config-check termino con el codigo $($process.ExitCode)." }
           $text = Get-Content -LiteralPath $report -Raw
-          foreach ($expected in 'actionType TypeTextAction=1', 'actionType VolumeAction=4', 'actionType WindowControlAction=4', 'actionType LaunchApplicationAction=1') {
+          foreach ($expected in 'actionType TypeTextAction=1', 'actionType VolumeAction=4', 'actionType WindowControlAction=4', 'actionType LaunchApplicationAction=2') {
             if (-not $text.Contains($expected)) { throw "El informe no contiene '$expected'." }
           }
 

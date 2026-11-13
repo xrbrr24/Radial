@@ -166,6 +166,46 @@ public class RadialOverlayCoordinatorActionTests
         Assert.True(result.IsSuccess);
     }
 
+    [Fact]
+    public void ATypeTextSelection_IsExecutedExactlyOnce_WhateverTheNumberOfPollsAndRepeatedEvents()
+    {
+        var root = new MenuId("main");
+        var text = new TypeTextAction("Texto de prueba ñ 😀\r\nfin");
+        var configuration = new RadialConfiguration
+        {
+            RootMenuId = root,
+            Menus = [new RadialMenu(root, "Main", [new RadialItem(new ItemId("texto"), "Texto", RadialDirection.North, text)])],
+            Geometry = new GeometrySettings { DeadZoneRadius = 40, HysteresisDegrees = 0 },
+        };
+        var coordinator = new RadialOverlayCoordinator(configuration, new FakeClock(), _presenter, () => _pointer, () => _now, _executor);
+        coordinator.ActionFinished += (item, result) =>
+        {
+            lock (_finished)
+            {
+                _finished.Add((item, result));
+            }
+        };
+
+        coordinator.Handle(Event(GestureEventKind.Activated, Center, 2_000));
+        _pointer = Towards(RadialDirection.North);
+        for (var i = 0; i < 5; i++)
+        {
+            coordinator.Poll(); // el sondeo del cursor solo actualiza el resalte
+        }
+
+        coordinator.Handle(Event(GestureEventKind.Confirmed, _pointer, 2_500));
+        for (var i = 0; i < 5; i++)
+        {
+            coordinator.Poll(); // ya no hay radial: nada que sondear ni ejecutar
+        }
+
+        coordinator.Handle(Event(GestureEventKind.Confirmed, _pointer, 2_600)); // un «confirmado» repetido no vuelve a ejecutar
+        coordinator.Handle(Event(GestureEventKind.Cancelled, _pointer, 2_700, CancelCause.CtrlReleased));
+
+        Assert.Same(text, Assert.Single(_executor.Executed));
+        Assert.Single(_finished);
+    }
+
     [Theory]
     [InlineData(RadialDirection.North, "copy")]
     [InlineData(RadialDirection.East, "paste")]

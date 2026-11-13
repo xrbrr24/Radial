@@ -6,6 +6,20 @@ using Radial.Windows.Shortcuts;
 
 namespace Radial.Windows.TextInput;
 
+/// <summary>Ritmo con el que se escribe un texto: cuántos caracteres van en cada envío y cuánto se espera entre envíos.</summary>
+public sealed record TypeTextOptions
+{
+    /// <summary>
+    /// Caracteres por llamada a <c>SendInput</c> (un emoji, un salto de línea o un tabulador cuentan como uno). Un texto de
+    /// cientos de eventos de una sola vez llega a la cola de la aplicación de golpe; algunas aplicaciones (editores con servicios de
+    /// texto, como el Bloc de notas de Windows 11) lo procesan de forma asíncrona y pueden mezclar o duplicar lo que reciben.
+    /// </summary>
+    public int CharactersPerBatch { get; init; } = 4;
+
+    /// <summary>Espera entre dos envíos. Windows la redondea al reloj del sistema (unos 15 ms).</summary>
+    public TimeSpan PauseBetweenBatches { get; init; } = TimeSpan.FromMilliseconds(5);
+}
+
 /// <summary>
 /// Escribe un texto (<see cref="TypeTextAction"/>) en la aplicación que tiene el foco, como entrada Unicode y sin tocar el
 /// portapapeles. Orden fijo, igual que el de los atajos:
@@ -16,8 +30,12 @@ namespace Radial.Windows.TextInput;
 ///    Si vence: <see cref="ActionErrorCodes.ModifiersNotReleased"/>. Cancelable.
 /// 5. Si la ventana en primer plano cambió durante la espera: <see cref="ActionErrorCodes.ForegroundChanged"/> (el texto iba para
 ///    otra aplicación).
-/// 6. UNA llamada de envío con todo el texto (Windows no intercala entrada ajena dentro de ella); si el sistema no la acepta entera,
-///    se suelta lo pulsado y se informa: <see cref="ActionErrorCodes.InputInjectionFailed"/> o <see cref="ActionErrorCodes.KeyReleaseFailed"/>.
+/// 6. El texto se envía en lotes de pocos caracteres COMPLETOS (<see cref="TypeTextOptions"/>), cada uno en UNA llamada (Windows no
+///    intercala entrada ajena dentro de ella) y con una pausa entre lotes. Entre lotes se vuelve a comprobar que siguen sin estar
+///    pulsados los modificadores y que la ventana en primer plano es la misma: si no, se detiene (el resto del texto NO se escribe
+///    en otro sitio ni como atajos). Si el sistema no acepta un lote entero, se suelta lo pulsado y se informa:
+///    <see cref="ActionErrorCodes.InputInjectionFailed"/> o <see cref="ActionErrorCodes.KeyReleaseFailed"/>. Ningún lote deja una
+///    tecla pulsada al acabar.
 /// El éxito es «Windows aceptó la entrada», no «la aplicación la procesó» (una aplicación elevada la descarta sin avisar: UIPI).
 /// Los mensajes NUNCA repiten el texto (puede ser una contraseña o datos personales); el registro tampoco. Se usa el inyector de
 /// producción, separado de la autoprueba: sus eventos no llevan la marca de Radial y los hooks los descartan por inyectados.
@@ -26,7 +44,10 @@ public sealed class TypeTextActionExecutor : IActionExecutor
 {
     private readonly IKeyboardInjector _injector;
     private readonly ModifierReleaseWaiter _waiter;
+    private readonly IModifierStateReader _modifiers;
     private readonly Func<IntPtr> _foregroundWindow;
+    private readonly Func<TimeSpan, CancellationToken, Task> _pause;
+    private readonly TypeTextOptions _textOptions;
 
     public TypeTextActionExecutor(
         IKeyboardInjector injector,
@@ -34,12 +55,24 @@ public sealed class TypeTextActionExecutor : IActionExecutor
         IClock clock,
         Func<IntPtr> foregroundWindow,
         ShortcutExecutorOptions? options = null,
-        Func<TimeSpan, CancellationToken, Task>? pause = null)
+        Func<TimeSpan, CancellationToken, Task>? pause = null,
+        TypeTextOptions? textOptions = null)
     {
         ArgumentNullException.ThrowIfNull(injector);
         ArgumentNullException.ThrowIfNull(modifiers);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(foregroundWindow);
+
+        _textOptions = textOptions ?? new TypeTextOptions();
+        if (_textOptions.CharactersPerBatch < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(textOptions), "Debe haber al menos un carácter por envío.");
+        }
+
+        if (_textOptions.PauseBetweenBatches < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(textOptions), "La pausa entre envíos no puede ser negativa.");
+        }
 
         var effective = options ?? new ShortcutExecutorOptions();
         if (effective.ModifierReleaseTimeout <= TimeSpan.Zero)
@@ -53,7 +86,9 @@ public sealed class TypeTextActionExecutor : IActionExecutor
         }
 
         _injector = injector;
-        _waiter = new ModifierReleaseWaiter(modifiers, clock, effective, pause ?? Task.Delay);
+        _modifiers = modifiers;
+        _pause = pause ?? Task.Delay;
+        _waiter = new ModifierReleaseWaiter(modifiers, clock, effective, _pause);
         _foregroundWindow = foregroundWindow;
     }
 
@@ -83,7 +118,7 @@ public sealed class TypeTextActionExecutor : IActionExecutor
             return ActionExecutionResult.Failure(ActionErrorCodes.InvalidAction, "La acción no es válida: " + string.Join(" ", problems));
         }
 
-        var events = TextSequence.Build(typeText.Text);
+        var batches = TextSequence.BuildBatches(typeText.Text, _textOptions.CharactersPerBatch);
 
         var target = _foregroundWindow();
         if (target == IntPtr.Zero)
@@ -110,16 +145,66 @@ public sealed class TypeTextActionExecutor : IActionExecutor
                 "La ventana activa cambió mientras se esperaba a soltar las teclas; no se escribió el texto.");
         }
 
-        // Último punto en que se puede cancelar: una vez enviado, no se puede recoger.
+        // Último punto en que se puede cancelar sin haber escrito nada: una vez enviado un lote, no se puede recoger.
         if (cancellationToken.IsCancellationRequested)
         {
             return ActionExecutionResult.Cancelled;
         }
 
+        for (var index = 0; index < batches.Count; index++)
+        {
+            if (index > 0)
+            {
+                // Entre lotes: la aplicación procesa lo recibido y se comprueba que nada ha cambiado. Lo que falta del texto NO se
+                // escribe si el usuario ya está en otra ventana o ha vuelto a pulsar un modificador (saldrían atajos, no texto).
+                try
+                {
+                    await _pause(_textOptions.PauseBetweenBatches, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return ActionExecutionResult.Cancelled;
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return ActionExecutionResult.Cancelled;
+                }
+
+                var now = _foregroundWindow();
+                if (now == IntPtr.Zero || now != target)
+                {
+                    return ActionExecutionResult.Failure(
+                        ActionErrorCodes.ForegroundChanged,
+                        "La ventana activa cambió mientras se escribía el texto; se detuvo y solo se escribió una parte.");
+                }
+
+                var pressed = _modifiers.ReadPressed();
+                if (pressed != KeyModifiers.None)
+                {
+                    return ActionExecutionResult.Failure(
+                        ActionErrorCodes.ModifiersNotReleased,
+                        "Se pulsó Ctrl, Mayús, Alt o Win mientras se escribía el texto; se detuvo y solo se escribió una parte.");
+                }
+            }
+
+            var failure = SendBatch(batches[index]);
+            if (failure is not null)
+            {
+                return failure;
+            }
+        }
+
+        return ActionExecutionResult.Success;
+    }
+
+    /// <returns><c>null</c> si Windows aceptó el lote entero; si no, el resultado con el que termina la ejecución.</returns>
+    private ActionExecutionResult? SendBatch(IReadOnlyList<KeyboardEvent> batch)
+    {
         KeyInjectionResult sent;
         try
         {
-            sent = _injector.Send(events);
+            sent = _injector.Send(batch);
         }
         catch (KeyInjectionException exception)
         {
@@ -133,7 +218,7 @@ public sealed class TypeTextActionExecutor : IActionExecutor
 
         if (sent.Success)
         {
-            return ActionExecutionResult.Success;
+            return null;
         }
 
         if (sent.ReleaseFailed)

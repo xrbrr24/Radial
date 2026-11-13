@@ -85,16 +85,27 @@
       "action": { "type": "windowControl", "operation": "close" }
     },
     {
-      "id": "app.bloc-de-notas",
-      "name": "Bloc de notas con archivo",
-      "description": "Abre en el Bloc de notas el archivo C:\\Temp\\prueba radial.txt (créalo antes): el nombre lleva un espacio y llega al programa como UN solo argumento.",
+      "id": "app.bloc-de-notas-control",
+      "name": "Bloc de notas: win.ini (control)",
+      "description": "Abre en el Bloc de notas C:\\Windows\\win.ini, que existe en cualquier Windows y no lleva espacios: prueba de control del lanzamiento con un argumento.",
       "category": "applications",
       "icon": { "source": "glyph", "value": "Application" },
       "action": {
         "type": "launchApplication",
         "path": "notepad.exe",
-        "arguments": ["C:\\Temp\\prueba radial.txt"],
-        "workingDirectory": "C:\\Windows"
+        "arguments": ["C:\\Windows\\win.ini"]
+      }
+    },
+    {
+      "id": "app.bloc-de-notas",
+      "name": "Bloc de notas: archivo con espacio",
+      "description": "Abre en el Bloc de notas C:\\Temp\\prueba radial.txt (créalo antes con los pasos de la guía): el nombre lleva un espacio y llega al programa como UN solo argumento.",
+      "category": "applications",
+      "icon": { "source": "glyph", "value": "Application" },
+      "action": {
+        "type": "launchApplication",
+        "path": "notepad.exe",
+        "arguments": ["C:\\Temp\\prueba radial.txt"]
       }
     }
   ],
@@ -118,7 +129,21 @@
           "icon": { "source": "glyph", "value": "TaskView" },
           "action": { "type": "openMenu", "targetMenuId": "ventana" }
         },
-        { "id": "main.notas", "position": "West", "actionId": "app.bloc-de-notas" }
+        {
+          "id": "main.notas",
+          "name": "Bloc de notas",
+          "position": "West",
+          "icon": { "source": "glyph", "value": "Application" },
+          "action": { "type": "openMenu", "targetMenuId": "notas" }
+        }
+      ]
+    },
+    {
+      "id": "notas",
+      "name": "Bloc de notas",
+      "items": [
+        { "id": "notas.control", "position": "North", "actionId": "app.bloc-de-notas-control" },
+        { "id": "notas.espacio", "position": "East", "actionId": "app.bloc-de-notas" }
       ]
     },
     {
