@@ -3,9 +3,10 @@ namespace Radial.Windows.Actions;
 /// <summary>
 /// Lo que hay que abrir. Destino, argumentos y directorio de trabajo van SEPARADOS: nunca se concatenan en una línea de
 /// comandos ni se pasan por un intérprete. <see cref="Target"/> es una aplicación, un archivo, una carpeta o una dirección web
-/// (lo que corresponda al ejecutor que la creó); <see cref="Arguments"/> son los argumentos tal como los escribió el usuario.
+/// (lo que corresponda al ejecutor que la creó); <see cref="Arguments"/> es la LISTA de argumentos, uno por elemento, que se pasa a
+/// <c>ProcessStartInfo.ArgumentList</c> (el propio .NET aplica el entrecomillado que corresponda; Radial no construye ninguna línea).
 /// </summary>
-public sealed record ProcessLaunchRequest(string Target, string? Arguments = null, string? WorkingDirectory = null);
+public sealed record ProcessLaunchRequest(string Target, IReadOnlyList<string>? Arguments = null, string? WorkingDirectory = null);
 
 public enum ProcessLaunchOutcome
 {

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "rootMenuId": "main",
+  "geometry": {
+    "deadZoneRadius": 44,
+    "hysteresisDegrees": 7
+  },
+  "navigation": {
+    "submenuDwellMs": 450,
+    "backDwellMs": 900,
+    "maxDepth": 3
+  },
+  "actions": [
+    {
+      "id": "texto.firma",
+      "name": "Firma",
+      "description": "Escribe una firma de dos líneas en la aplicación activa.",
+      "category": "editing",
+      "tags": ["texto", "correo"],
+      "icon": { "source": "glyph", "value": "Keyboard" },
+      "action": { "type": "typeText", "text": "Un saludo,\r\nAna" }
+    },
+    {
+      "id": "volumen.subir",
+      "name": "Subir volumen",
+      "description": "Sube el volumen del dispositivo de salida 5 puntos.",
+      "category": "multimedia",
+      "icon": { "source": "glyph", "value": "VolumeUp" },
+      "action": { "type": "volume", "operation": "increase", "percent": 5 }
+    },
+    {
+      "id": "volumen.bajar",
+      "name": "Bajar volumen",
+      "description": "Baja el volumen del dispositivo de salida 5 puntos.",
+      "category": "multimedia",
+      "icon": { "source": "glyph", "value": "VolumeDown" },
+      "action": { "type": "volume", "operation": "decrease", "percent": 5 }
+    },
+    {
+      "id": "volumen.silencio",
+      "name": "Silencio",
+      "description": "Activa o quita el silencio.",
+      "category": "multimedia",
+      "icon": { "source": "glyph", "value": "Mute" },
+      "action": { "type": "volume", "operation": "toggleMute" }
+    },
+    {
+      "id": "volumen.medio",
+      "name": "Volumen al 40 %",
+      "description": "Fija el volumen en el 40 %.",
+      "category": "multimedia",
+      "icon": { "source": "glyph", "value": "VolumeUp" },
+      "action": { "type": "volume", "operation": "setLevel", "percent": 40 }
+    },
+    {
+      "id": "ventana.minimizar",
+      "name": "Minimizar",
+      "description": "Minimiza la ventana activa.",
+      "category": "system",
+      "icon": { "source": "glyph", "value": "TaskView" },
+      "action": { "type": "windowControl", "operation": "minimize" }
+    },
+    {
+      "id": "ventana.maximizar",
+      "name": "Maximizar",
+      "description": "Maximiza la ventana activa.",
+      "category": "system",
+      "icon": { "source": "glyph", "value": "TaskView" },
+      "action": { "type": "windowControl", "operation": "maximize" }
+    },
+    {
+      "id": "ventana.cerrar",
+      "name": "Cerrar ventana",
+      "description": "Cierra la ventana activa (la aplicación puede preguntar si guardar).",
+      "category": "system",
+      "icon": { "source": "glyph", "value": "Close" },
+      "action": { "type": "windowControl", "operation": "close" }
+    },
+    {
+      "id": "app.bloc-de-notas",
+      "name": "Bloc de notas con archivo",
+      "description": "Abre un archivo concreto en el Bloc de notas: el programa recibe cada argumento tal cual.",
+      "category": "applications",
+      "icon": { "source": "glyph", "value": "Application" },
+      "action": {
+        "type": "launchApplication",
+        "path": "notepad.exe",
+        "arguments": ["C:\\Windows\\win.ini"],
+        "workingDirectory": "C:\\Windows"
+      }
+    }
+  ],
+  "menus": [
+    {
+      "id": "main",
+      "name": "Principal",
+      "items": [
+        { "id": "main.firma", "position": "North", "actionId": "texto.firma" },
+        { "id": "main.mas", "position": "NorthEast", "actionId": "volumen.subir" },
+        { "id": "main.menos", "position": "East", "actionId": "volumen.bajar" },
+        { "id": "main.silencio", "position": "SouthEast", "actionId": "volumen.silencio" },
+        { "id": "main.minimizar", "position": "South", "actionId": "ventana.minimizar" },
+        { "id": "main.maximizar", "position": "SouthWest", "actionId": "ventana.maximizar" },
+        { "id": "main.cerrar", "position": "West", "actionId": "ventana.cerrar" },
+        { "id": "main.notas", "position": "NorthWest", "actionId": "app.bloc-de-notas" }
+      ]
+    }
+  ]
+}

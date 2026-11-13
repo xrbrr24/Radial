@@ -50,6 +50,24 @@ public static class ActionErrorCodes
     /// </summary>
     public const string TargetNotAllowed = "TargetNotAllowed";
 
+    /// <summary>No hay dispositivo de salida de audio predeterminado, o Windows no permite abrirlo ahora (desconectado, servicio de audio detenido).</summary>
+    public const string AudioUnavailable = "AudioUnavailable";
+
+    /// <summary>Windows rechazó leer o cambiar el volumen o el silencio del dispositivo de salida.</summary>
+    public const string AudioControlFailed = "AudioControlFailed";
+
+    /// <summary>
+    /// No hay una ventana externa sobre la que actuar: ninguna en primer plano, es de Radial, es el escritorio o la barra de tareas,
+    /// o dejó de existir. No se hizo nada.
+    /// </summary>
+    public const string WindowNotAvailable = "WindowNotAvailable";
+
+    /// <summary>La ventana existe pero no admite la operación pedida (p. ej. no se puede maximizar, o ya está maximizada).</summary>
+    public const string WindowOperationNotSupported = "WindowOperationNotSupported";
+
+    /// <summary>Windows rechazó la operación sobre la ventana (p. ej. la ventana pertenece a un proceso elevado).</summary>
+    public const string WindowOperationFailed = "WindowOperationFailed";
+
     /// <summary>Un ejecutor lanzó una excepción en lugar de devolver un resultado: es un defecto, pero no debe quedar en silencio.</summary>
     public const string UnexpectedError = "UnexpectedError";
 }

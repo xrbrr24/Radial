@@ -25,7 +25,7 @@ public class ProcessExecutorContractTests : IClassFixture<TempFileSystem>
 
     private Case For(string kind) => kind switch
     {
-        "application" => new Case(l => new LaunchApplicationActionExecutor(l), new LaunchApplicationAction(@"C:\Apps\secreto.exe", "--x", @"C:\Apps"), new LaunchApplicationAction(""), @"C:\Apps\secreto.exe"),
+        "application" => new Case(l => new LaunchApplicationActionExecutor(l), new LaunchApplicationAction(@"C:\Apps\secreto.exe", ["--x"], @"C:\Apps"), new LaunchApplicationAction(""), @"C:\Apps\secreto.exe"),
         "file" => new Case(l => new OpenFileActionExecutor(l), new OpenFileAction(_fs.ExistingFile), new OpenFileAction("   "), _fs.ExistingFile),
         "folder" => new Case(l => new OpenFolderActionExecutor(l), new OpenFolderAction(_fs.ExistingFolder), new OpenFolderAction(""), _fs.ExistingFolder),
         "url" => new Case(l => new OpenUrlActionExecutor(l), new OpenUrlAction("https://example.com/privado"), new OpenUrlAction("no es una url"), "example.com/privado"),

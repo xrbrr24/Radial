@@ -30,11 +30,12 @@ public class ShellProcessLauncherTests
     [Fact]
     public void TheStartInfo_UsesTheShell_AndKeepsTargetArgumentsAndDirectorySeparate()
     {
-        var info = ShellProcessLauncher.CreateStartInfo(new ProcessLaunchRequest(@"C:\Apps\a.exe", "--x \"y z\"", @"C:\Trabajo"));
+        var info = ShellProcessLauncher.CreateStartInfo(new ProcessLaunchRequest(@"C:\Apps\a.exe", ["--x", "y z"], @"C:\Trabajo"));
 
         Assert.True(info.UseShellExecute);
         Assert.Equal(@"C:\Apps\a.exe", info.FileName);
-        Assert.Equal("--x \"y z\"", info.Arguments);
+        Assert.Equal<string>(new[] { "--x", "y z" }, info.ArgumentList);
+        Assert.Equal(string.Empty, info.Arguments); // nada de componer una línea: cada argumento va en su sitio
         Assert.Equal(@"C:\Trabajo", info.WorkingDirectory);
     }
 
@@ -56,12 +57,13 @@ public class ShellProcessLauncherTests
     [InlineData("notepad.exe")]
     public void TheTarget_IsNeverWrappedInAShellOrAnInterpreter(string target)
     {
-        var info = ShellProcessLauncher.CreateStartInfo(new ProcessLaunchRequest(target, "arg & otro | tercero"));
+        var info = ShellProcessLauncher.CreateStartInfo(new ProcessLaunchRequest(target, ["arg & otro | tercero"]));
 
         Assert.Equal(target, info.FileName);
         Assert.DoesNotContain("cmd", info.FileName, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("powershell", info.FileName, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(target, info.Arguments); // el destino no se mezcla con los argumentos
+        Assert.DoesNotContain(target, info.ArgumentList); // el destino no se mezcla con los argumentos
+        Assert.Equal<string>(new[] { "arg & otro | tercero" }, info.ArgumentList); // el destino no se mezcla con los argumentos
         Assert.False(info.RedirectStandardOutput);
         Assert.False(info.RedirectStandardInput);
         Assert.False(info.RedirectStandardError);
@@ -165,13 +167,13 @@ public class ShellProcessLauncherTests
         var start = new RecordingStart();
         var executor = new LaunchApplicationActionExecutor(new ShellProcessLauncher(start.Start));
 
-        var result = await executor.ExecuteAsync(new LaunchApplicationAction(@"C:\Apps\a.exe", "--x", @"C:\Apps"));
+        var result = await executor.ExecuteAsync(new LaunchApplicationAction(@"C:\Apps\a.exe", ["--x"], @"C:\Apps"));
 
         Assert.True(result.IsSuccess);
         var info = Assert.Single(start.Infos);
         Assert.True(info.UseShellExecute);
         Assert.Equal(@"C:\Apps\a.exe", info.FileName);
-        Assert.Equal("--x", info.Arguments);
+        Assert.Equal<string>(new[] { "--x" }, info.ArgumentList);
         Assert.Equal(@"C:\Apps", info.WorkingDirectory);
     }
 

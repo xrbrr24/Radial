@@ -100,7 +100,7 @@ public class ConfigurationLoadValidationTests
     public void AValidTarget_HasNoProblems()
     {
         Assert.Empty(ActionTargets.GetProblems(new LaunchApplicationAction("notepad.exe")));
-        Assert.Empty(ActionTargets.GetProblems(new LaunchApplicationAction(@"C:\Apps\a.exe", "--x", @"C:\Apps")));
+        Assert.Empty(ActionTargets.GetProblems(new LaunchApplicationAction(@"C:\Apps\a.exe", ["--x"], @"C:\Apps")));
         Assert.Empty(ActionTargets.GetProblems(new OpenFileAction(@"C:\Docs\a.txt")));
         Assert.Empty(ActionTargets.GetProblems(new OpenFolderAction(@"\\servidor\recurso")));
     }

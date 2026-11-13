@@ -36,11 +36,8 @@ public sealed record ShortcutExecutorOptions
 public sealed class ShortcutActionExecutor : IActionExecutor
 {
     private readonly IKeyboardInjector _injector;
-    private readonly IModifierStateReader _modifiers;
-    private readonly IClock _clock;
+    private readonly ModifierReleaseWaiter _waiter;
     private readonly Func<IntPtr> _foregroundWindow;
-    private readonly Func<TimeSpan, CancellationToken, Task> _pause;
-    private readonly ShortcutExecutorOptions _options;
 
     public ShortcutActionExecutor(
         IKeyboardInjector injector,
@@ -55,22 +52,20 @@ public sealed class ShortcutActionExecutor : IActionExecutor
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(foregroundWindow);
 
-        _options = options ?? new ShortcutExecutorOptions();
-        if (_options.ModifierReleaseTimeout <= TimeSpan.Zero)
+        var effective = options ?? new ShortcutExecutorOptions();
+        if (effective.ModifierReleaseTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "El tiempo de espera debe ser positivo.");
         }
 
-        if (_options.PollInterval <= TimeSpan.Zero)
+        if (effective.PollInterval <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "El intervalo de consulta debe ser positivo.");
         }
 
         _injector = injector;
-        _modifiers = modifiers;
-        _clock = clock;
+        _waiter = new ModifierReleaseWaiter(modifiers, clock, effective, pause ?? Task.Delay);
         _foregroundWindow = foregroundWindow;
-        _pause = pause ?? Task.Delay;
     }
 
     /// <summary>Ejecutor de producción: <c>SendInput</c>, <c>GetAsyncKeyState</c>, reloj monotónico y ventana en primer plano de Windows.</summary>
@@ -113,7 +108,7 @@ public sealed class ShortcutActionExecutor : IActionExecutor
             return NoForegroundWindow();
         }
 
-        var wait = await WaitForModifiersToBeReleasedAsync(cancellationToken).ConfigureAwait(false);
+        var wait = await _waiter.WaitAsync("No se envió el atajo.", cancellationToken).ConfigureAwait(false);
         if (wait is not null)
         {
             return wait;
@@ -178,64 +173,4 @@ public sealed class ShortcutActionExecutor : IActionExecutor
 
     private static ActionExecutionResult NoForegroundWindow() =>
         ActionExecutionResult.Failure(ActionErrorCodes.ForegroundChanged, "No hay ninguna ventana en primer plano; no se envió el atajo.");
-
-    /// <returns><c>null</c> si ya no hay modificadores pulsados; si no, el resultado con el que termina la ejecución.</returns>
-    private async Task<ActionExecutionResult?> WaitForModifiersToBeReleasedAsync(CancellationToken cancellationToken)
-    {
-        var deadline = _clock.Now + _options.ModifierReleaseTimeout;
-        KeyModifiers pressed;
-
-        while ((pressed = _modifiers.ReadPressed()) != KeyModifiers.None)
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return ActionExecutionResult.Cancelled;
-            }
-
-            if (_clock.Now >= deadline)
-            {
-                return ActionExecutionResult.Failure(
-                    ActionErrorCodes.ModifiersNotReleased,
-                    $"Siguen pulsadas estas teclas tras {_options.ModifierReleaseTimeout.TotalSeconds:0.#} s: {Describe(pressed)}. No se envió el atajo.");
-            }
-
-            try
-            {
-                await _pause(_options.PollInterval, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return ActionExecutionResult.Cancelled;
-            }
-        }
-
-        // Soltadas a tiempo; si se canceló justo entonces, no se envía nada.
-        return cancellationToken.IsCancellationRequested ? ActionExecutionResult.Cancelled : null;
-    }
-
-    private static string Describe(KeyModifiers modifiers)
-    {
-        var names = new List<string>(4);
-        if (modifiers.HasFlag(KeyModifiers.Control))
-        {
-            names.Add("Ctrl");
-        }
-
-        if (modifiers.HasFlag(KeyModifiers.Shift))
-        {
-            names.Add("Mayús");
-        }
-
-        if (modifiers.HasFlag(KeyModifiers.Alt))
-        {
-            names.Add("Alt");
-        }
-
-        if (modifiers.HasFlag(KeyModifiers.Windows))
-        {
-            names.Add("Win");
-        }
-
-        return string.Join(", ", names);
-    }
 }

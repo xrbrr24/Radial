@@ -47,9 +47,13 @@ public sealed class ShellProcessLauncher : IProcessLauncher
             UseShellExecute = true,
         };
 
-        if (request.Arguments is not null)
+        // La API de argumentos del proceso: una entrada por argumento, sin componer ni interpretar ninguna cadena.
+        if (request.Arguments is { Count: > 0 } arguments)
         {
-            info.Arguments = request.Arguments;
+            foreach (var argument in arguments)
+            {
+                info.ArgumentList.Add(argument);
+            }
         }
 
         if (request.WorkingDirectory is not null)

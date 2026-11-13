@@ -118,6 +118,8 @@ public static class LibraryResolver
         LaunchApplicationAction => ActionCategory.Applications,
         OpenFileAction or OpenFolderAction => ActionCategory.Files,
         OpenUrlAction => ActionCategory.Browser,
+        VolumeAction => ActionCategory.Multimedia,
+        WindowControlAction => ActionCategory.System,
         _ => ActionCategory.Custom,
     };
 
@@ -129,6 +131,9 @@ public static class LibraryResolver
         OpenFileAction => "Document",
         OpenFolderAction => "Folder",
         OpenUrlAction => "Link",
+        TypeTextAction => "Keyboard",
+        VolumeAction => "VolumeUp",
+        WindowControlAction => "TaskView",
         _ => "More",
     });
 

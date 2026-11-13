@@ -26,6 +26,7 @@ public sealed class SendInputKeyboardInjector : IKeyboardInjector
     private const uint InputKeyboard = 1;
     private const uint KeyEventExtended = 0x0001;
     private const uint KeyEventUp = 0x0002;
+    private const uint KeyEventUnicode = 0x0004;
 
     private readonly Func<NativeMethods.INPUT[], (uint Inserted, int Win32Error)> _send;
 
@@ -109,8 +110,10 @@ public sealed class SendInputKeyboardInjector : IKeyboardInjector
                 type = InputKeyboard,
                 ki = new NativeMethods.KEYBDINPUT
                 {
-                    wVk = e.Code,
-                    dwFlags = (e.KeyUp ? KeyEventUp : 0) | (e.Extended ? KeyEventExtended : 0),
+                    // Unicode: sin tecla virtual; el carácter (unidad UTF-16) va en wScan.
+                    wVk = e.Unicode ? (ushort)0 : e.Code,
+                    wScan = e.Unicode ? e.Code : (ushort)0,
+                    dwFlags = (e.KeyUp ? KeyEventUp : 0) | (e.Extended ? KeyEventExtended : 0) | (e.Unicode ? KeyEventUnicode : 0),
                     dwExtraInfo = IntPtr.Zero,
                 },
             };

@@ -79,7 +79,51 @@ internal static class UiPreviewRenderer
         dialogs.CurrentDialog?.Complete(1); // confirma el descarte del formulario
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
         shell.Library.New.Execute(ActionKind.Application);
+        if (shell.Library.Form is { } appForm)
+        {
+            appForm.Name = "Editor de texto";
+            appForm.Path = @"C:\Apps\editor.exe";
+            appForm.Arguments = "--nueva-ventana\r\n--perfil=trabajo\r\nMi documento.txt";
+            appForm.WorkingDirectory = @"C:\Trabajo";
+        }
+
         Save(shell, folder, "14-biblioteca-formulario-aplicacion", 1320, 820);
+
+        shell.Library.CancelForm.Execute(null);
+        dialogs.CurrentDialog?.Complete(1);
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        shell.Library.New.Execute(ActionKind.Text);
+        if (shell.Library.Form is { } textForm)
+        {
+            textForm.Name = "Firma de correo";
+            textForm.Text = "Saludos cordiales,\r\nAna";
+        }
+
+        Save(shell, folder, "15-biblioteca-formulario-texto", 1320, 820);
+
+        shell.Library.CancelForm.Execute(null);
+        dialogs.CurrentDialog?.Complete(1);
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        shell.Library.New.Execute(ActionKind.Volume);
+        if (shell.Library.Form is { } volumeForm)
+        {
+            volumeForm.Name = "Subir volumen";
+            volumeForm.VolumePercent = "10";
+        }
+
+        Save(shell, folder, "16-biblioteca-formulario-volumen", 1320, 820);
+
+        shell.Library.CancelForm.Execute(null);
+        dialogs.CurrentDialog?.Complete(1);
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        shell.Library.New.Execute(ActionKind.Window);
+        if (shell.Library.Form is { } windowForm)
+        {
+            windowForm.Name = "Maximizar ventana";
+            windowForm.WindowOperation = WindowOperation.Maximize;
+        }
+
+        Save(shell, folder, "17-biblioteca-formulario-ventana", 1320, 820);
 
         // Ajustes y un diálogo de confirmación.
         shell.Go(AppSection.Settings);

@@ -1,6 +1,9 @@
 using Radial.Core.Execution;
 using Radial.Windows.Actions;
+using Radial.Windows.Audio;
 using Radial.Windows.Shortcuts;
+using Radial.Windows.TextInput;
+using Radial.Windows.WindowControl;
 
 namespace Radial.App;
 
@@ -21,6 +24,9 @@ internal static class ActionExecutors
             new OpenFolderActionExecutor(launcher),
             new OpenUrlActionExecutor(launcher),
             ShortcutActionExecutor.CreateDefault(),
+            TypeTextActionExecutor.CreateDefault(),
+            VolumeActionExecutor.CreateDefault(),
+            WindowControlActionExecutor.CreateDefault(),
         ]);
     }
 }

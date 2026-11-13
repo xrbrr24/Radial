@@ -54,6 +54,15 @@
                                 <Button Style="{StaticResource Button.Ghost}" Command="{Binding New}" CommandParameter="{x:Static e:ActionKind.Url}" Click="OnNewKind" HorizontalContentAlignment="Left" Padding="10,8">
                                     <StackPanel Orientation="Horizontal"><c:GlyphIcon Glyph="Globe" Margin="0,0,10,0" Foreground="{DynamicResource Brush.Accent}" /><StackPanel><TextBlock Text="Dirección web" Foreground="{DynamicResource Brush.Text}" /><TextBlock Text="Una página http o https" Style="{StaticResource Text.Caption}" /></StackPanel></StackPanel>
                                 </Button>
+                                <Button Style="{StaticResource Button.Ghost}" Command="{Binding New}" CommandParameter="{x:Static e:ActionKind.Text}" Click="OnNewKind" HorizontalContentAlignment="Left" Padding="10,8">
+                                    <StackPanel Orientation="Horizontal"><c:GlyphIcon Glyph="Keyboard" Margin="0,0,10,0" Foreground="{DynamicResource Brush.Accent}" /><StackPanel><TextBlock Text="Insertar texto" Foreground="{DynamicResource Brush.Text}" /><TextBlock Text="Escribe un texto en la aplicación activa" Style="{StaticResource Text.Caption}" /></StackPanel></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource Button.Ghost}" Command="{Binding New}" CommandParameter="{x:Static e:ActionKind.Volume}" Click="OnNewKind" HorizontalContentAlignment="Left" Padding="10,8">
+                                    <StackPanel Orientation="Horizontal"><c:GlyphIcon Glyph="VolumeUp" Margin="0,0,10,0" Foreground="{DynamicResource Brush.Accent}" /><StackPanel><TextBlock Text="Volumen" Foreground="{DynamicResource Brush.Text}" /><TextBlock Text="Sube, baja, fija o silencia el sonido" Style="{StaticResource Text.Caption}" /></StackPanel></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource Button.Ghost}" Command="{Binding New}" CommandParameter="{x:Static e:ActionKind.Window}" Click="OnNewKind" HorizontalContentAlignment="Left" Padding="10,8">
+                                    <StackPanel Orientation="Horizontal"><c:GlyphIcon Glyph="TaskView" Margin="0,0,10,0" Foreground="{DynamicResource Brush.Accent}" /><StackPanel><TextBlock Text="Ventana activa" Foreground="{DynamicResource Brush.Text}" /><TextBlock Text="Minimiza, maximiza, restaura o cierra" Style="{StaticResource Text.Caption}" /></StackPanel></StackPanel>
+                                </Button>
                             </StackPanel>
                         </Border>
                     </Popup>
@@ -277,8 +286,11 @@
                                 </Grid>
                             </StackPanel>
                             <StackPanel Visibility="{Binding IsApplication, Converter={StaticResource VisibleWhenTrue}}" Margin="0,14,0,0">
-                                <TextBlock Style="{StaticResource Text.Section}" Text="ARGUMENTOS (OPCIONAL)" Margin="0,0,0,6" />
-                                <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}" t:Attached.Hint="Por ejemplo: --nueva-ventana" />
+                                <TextBlock Style="{StaticResource Text.Section}" Text="ARGUMENTOS (OPCIONAL, UNO POR LÍNEA)" Margin="0,0,0,6" />
+                                <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="64" MaxHeight="160"
+                                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" t:Attached.Hint="Por ejemplo: --nueva-ventana" />
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Cada línea es un argumento y se pasa tal cual al programa, sin comillas ni intérprete de comandos. Un nombre de archivo con espacios va en una sola línea." />
                                 <TextBlock Style="{StaticResource Text.Section}" Text="CARPETA DE TRABAJO (OPCIONAL)" Margin="0,14,0,6" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -295,6 +307,35 @@
                                 <TextBlock Style="{StaticResource Text.Section}" Text="DIRECCIÓN" Margin="0,0,0,6" />
                                 <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" t:Attached.Hint="https://…" />
                                 <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0" Text="Solo se admiten direcciones http y https." />
+                            </StackPanel>
+
+                            <!-- Insertar texto -->
+                            <StackPanel Visibility="{Binding IsText, Converter={StaticResource VisibleWhenTrue}}" Margin="0,14,0,0">
+                                <TextBlock Style="{StaticResource Text.Section}" Text="TEXTO" Margin="0,0,0,6" />
+                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap" MaxLength="1000" MinHeight="96" MaxHeight="220"
+                                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" t:Attached.Hint="Lo que se escribirá en la aplicación activa" />
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Se escribe tal cual (hasta 1000 caracteres; cada salto de línea es un Intro) y sin usar el portapapeles. Radial espera a que sueltes Ctrl antes de escribir. No guardes contraseñas aquí: el texto queda en config.json." />
+                            </StackPanel>
+
+                            <!-- Volumen -->
+                            <StackPanel Visibility="{Binding IsVolume, Converter={StaticResource VisibleWhenTrue}}" Margin="0,14,0,0">
+                                <TextBlock Style="{StaticResource Text.Section}" Text="OPERACIÓN" Margin="0,0,0,6" />
+                                <ComboBox ItemsSource="{x:Static vm:ActionFormViewModel.VolumeOperationOptions}" SelectedValuePath="Operation" ItemTemplate="{StaticResource Template.Name}" SelectedValue="{Binding VolumeOperation, Mode=TwoWay}" />
+                                <StackPanel Visibility="{Binding UsesVolumePercent, Converter={StaticResource VisibleWhenTrue}}">
+                                    <TextBlock Style="{StaticResource Text.Section}" Text="{Binding VolumePercentLabel}" Margin="0,14,0,6" />
+                                    <TextBox Text="{Binding VolumePercent, UpdateSourceTrigger=PropertyChanged}" MaxLength="3" Width="90" HorizontalAlignment="Left" t:Attached.Hint="5" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Controla el dispositivo de salida predeterminado de Windows. Subir y fijar un nivel mayor que 0 también quitan el silencio." />
+                            </StackPanel>
+
+                            <!-- Ventana activa -->
+                            <StackPanel Visibility="{Binding IsWindow, Converter={StaticResource VisibleWhenTrue}}" Margin="0,14,0,0">
+                                <TextBlock Style="{StaticResource Text.Section}" Text="OPERACIÓN" Margin="0,0,0,6" />
+                                <ComboBox ItemsSource="{x:Static vm:ActionFormViewModel.WindowOperationOptions}" SelectedValuePath="Operation" ItemTemplate="{StaticResource Template.Name}" SelectedValue="{Binding WindowOperation, Mode=TwoWay}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Actúa sobre la ventana de otra aplicación que tiene el foco al confirmar; nunca sobre Radial, el escritorio ni la barra de tareas. Cerrar es un cierre normal: la aplicación puede preguntar si guardar." />
                             </StackPanel>
 
                             <TextBlock Style="{StaticResource Text.Section}" Text="CATEGORÍA" Margin="0,14,0,6" />

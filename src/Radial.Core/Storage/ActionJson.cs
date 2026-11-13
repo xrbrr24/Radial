@@ -20,6 +20,9 @@ internal static class ActionJson
     public const string OpenUrl = "openUrl";
     public const string SendKeys = "sendKeys";
     public const string OpenMenu = "openMenu";
+    public const string TypeText = "typeText";
+    public const string Volume = "volume";
+    public const string WindowControl = "windowControl";
 
     private static readonly (KeyModifiers Flag, string Name)[] ModifierNames =
     [
@@ -27,6 +30,22 @@ internal static class ActionJson
         (KeyModifiers.Shift, "Shift"),
         (KeyModifiers.Alt, "Alt"),
         (KeyModifiers.Windows, "Windows"),
+    ];
+
+    private static readonly (VolumeOperation Operation, string Name)[] VolumeNames =
+    [
+        (VolumeOperation.Increase, "increase"),
+        (VolumeOperation.Decrease, "decrease"),
+        (VolumeOperation.SetLevel, "setLevel"),
+        (VolumeOperation.ToggleMute, "toggleMute"),
+    ];
+
+    private static readonly (WindowOperation Operation, string Name)[] WindowNames =
+    [
+        (WindowOperation.Minimize, "minimize"),
+        (WindowOperation.Maximize, "maximize"),
+        (WindowOperation.Restore, "restore"),
+        (WindowOperation.Close, "close"),
     ];
 
     /// <exception cref="NotSupportedException">Un tipo de acción nuevo del modelo todavía no tiene serialización.</exception>
@@ -41,7 +60,11 @@ internal static class ActionJson
             {
                 var json = Typed(LaunchApplication);
                 json["path"] = launch.Path;
-                SetIfNotNull(json, "arguments", launch.Arguments);
+                if (launch.Arguments is { Count: > 0 } arguments)
+                {
+                    json["arguments"] = new JsonArray(arguments.Select(a => (JsonNode?)JsonValue.Create(a)).ToArray());
+                }
+
                 SetIfNotNull(json, "workingDirectory", launch.WorkingDirectory);
                 return json;
             }
@@ -91,6 +114,34 @@ internal static class ActionJson
                 return json;
             }
 
+            case TypeTextAction text:
+            {
+                var json = Typed(TypeText);
+                json["text"] = text.Text;
+                return json;
+            }
+
+            case VolumeAction volume:
+            {
+                var json = Typed(Volume);
+                json["operation"] = VolumeNames.FirstOrDefault(v => v.Operation == volume.Operation).Name
+                    ?? throw new NotSupportedException("La operación de volumen no tiene nombre de serialización definido.");
+                if (volume.Operation != VolumeOperation.ToggleMute)
+                {
+                    json["percent"] = volume.Percent;
+                }
+
+                return json;
+            }
+
+            case WindowControlAction window:
+            {
+                var json = Typed(WindowControl);
+                json["operation"] = WindowNames.FirstOrDefault(w => w.Operation == window.Operation).Name
+                    ?? throw new NotSupportedException("La operación de ventana no tiene nombre de serialización definido.");
+                return json;
+            }
+
             case UnknownAction unknown:
                 return ParseOriginal(unknown);
 
@@ -128,7 +179,7 @@ internal static class ActionJson
             case LaunchApplication:
                 action = new LaunchApplicationAction(
                     ReadString(json, "path", path, issues) ?? string.Empty,
-                    ReadString(json, "arguments", path, issues),
+                    ReadArguments(json, path, issues),
                     ReadString(json, "workingDirectory", path, issues));
                 break;
 
@@ -152,6 +203,20 @@ internal static class ActionJson
 
             case OpenMenu:
                 action = new OpenMenuAction(new MenuId(ReadString(json, "targetMenuId", path, issues) ?? string.Empty));
+                break;
+
+            case TypeText:
+                action = new TypeTextAction(ReadString(json, "text", path, issues) ?? string.Empty);
+                break;
+
+            case Volume:
+                action = new VolumeAction(
+                    ReadOperation(json, path, issues, VolumeNames, (VolumeOperation)(-1)),
+                    ReadInt(json, "percent", path, issues));
+                break;
+
+            case WindowControl:
+                action = new WindowControlAction(ReadOperation(json, path, issues, WindowNames, (WindowOperation)(-1)));
                 break;
 
             default:
@@ -182,7 +247,7 @@ internal static class ActionJson
 
     /// <summary>El discriminador es de un tipo de acción que esta versión conoce (distinto de «desconocido»: una acción neutralizada lo conserva).</summary>
     public static bool IsKnownType(string? type) =>
-        type is LaunchApplication or OpenFile or OpenFolder or OpenUrl or SendKeys or OpenMenu;
+        type is LaunchApplication or OpenFile or OpenFolder or OpenUrl or SendKeys or OpenMenu or TypeText or Volume or WindowControl;
 
     private static JsonObject Typed(string type) => new() { ["type"] = type };
 
@@ -225,6 +290,76 @@ internal static class ActionJson
 
         issues.Add(Error(ConfigurationCodes.ActionPropertyInvalid, $"{path}.{name}", $"El campo «{name}» debe ser un texto."));
         return null;
+    }
+
+    // Una lista de textos (formato actual) o una línea de texto (formato antiguo, que se divide con las reglas de Windows).
+    // Ausente o null = sin argumentos. Cualquier otro tipo JSON, o un elemento que no sea texto, es un problema de lectura.
+    private static IReadOnlyList<string>? ReadArguments(JsonObject json, string path, List<ValidationIssue> issues)
+    {
+        if (!json.TryGetPropertyValue("arguments", out var node) || node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<string>(out var line))
+        {
+            var split = CommandLineArguments.Split(line);
+            return split.Count == 0 ? null : split;
+        }
+
+        if (node is not JsonArray array)
+        {
+            issues.Add(Error(ConfigurationCodes.ActionPropertyInvalid, $"{path}.arguments", "El campo «arguments» debe ser una lista de textos."));
+            return null;
+        }
+
+        var result = new List<string>(array.Count);
+        for (var index = 0; index < array.Count; index++)
+        {
+            if (array[index] is JsonValue element && element.TryGetValue<string>(out var text))
+            {
+                result.Add(text);
+            }
+            else
+            {
+                issues.Add(Error(ConfigurationCodes.ActionPropertyInvalid, $"{path}.arguments[{index}]", "Cada argumento debe ser un texto."));
+            }
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    // Ausente o null = 0. Presente pero no un número entero = problema de lectura.
+    private static int ReadInt(JsonObject json, string name, string path, List<ValidationIssue> issues)
+    {
+        if (!json.TryGetPropertyValue(name, out var node) || node is null)
+        {
+            return 0;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        issues.Add(Error(ConfigurationCodes.ActionPropertyInvalid, $"{path}.{name}", $"El campo «{name}» debe ser un número entero."));
+        return 0;
+    }
+
+    // Un nombre de operación desconocido o ausente NO es un problema de lectura: devuelve un valor fuera del enum y la validación del
+    // modelo lo señala (la carga tolerante neutraliza la acción y conserva su JSON). Un campo que no es texto sí es estructura.
+    private static T ReadOperation<T>(JsonObject json, string path, List<ValidationIssue> issues, (T Operation, string Name)[] names, T unknown)
+    {
+        var text = ReadString(json, "operation", path, issues);
+        foreach (var (operation, name) in names)
+        {
+            if (string.Equals(name, text, StringComparison.Ordinal))
+            {
+                return operation;
+            }
+        }
+
+        return unknown;
     }
 
     private static KeyModifiers ReadModifiers(JsonObject json, string path, List<ValidationIssue> issues)

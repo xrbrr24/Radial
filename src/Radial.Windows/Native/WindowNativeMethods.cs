@@ -81,6 +81,40 @@ internal static partial class WindowNativeMethods
     [LibraryImport("user32.dll")]
     internal static partial int GetSystemMetrics(int nIndex);
 
+    // Control de ventanas externas (acción «controlar ventana»). Todas son consultas sin bloqueo salvo PostMessage, que solo encola.
+    internal const int GWL_STYLE = -16;
+    internal const long WS_MAXIMIZEBOX = 0x00010000;
+    internal const long WS_MINIMIZEBOX = 0x00020000;
+    internal const uint WM_SYSCOMMAND = 0x0112;
+    internal const int SC_CLOSE = 0xF060;
+    internal const int SC_MAXIMIZE = 0xF030;
+    internal const int SC_MINIMIZE = 0xF020;
+    internal const int SC_RESTORE = 0xF120;
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsWindowVisible(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsIconic(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsZoomed(IntPtr hWnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetClassNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial int GetClassName(IntPtr hWnd, [Out] char[] className, int maxCount);
+
+    /// <summary>Encola un mensaje en la ventana y vuelve (no espera a que la ventana lo atienda: una ventana colgada no bloquea a Radial).</summary>
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool PostMessage(IntPtr hWnd, uint msg, UIntPtr wParam, IntPtr lParam);
+
     internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
     /// <summary>Rectángulo visible de la ventana según DWM (sin sombras ni bordes invisibles de redimensionado).</summary>

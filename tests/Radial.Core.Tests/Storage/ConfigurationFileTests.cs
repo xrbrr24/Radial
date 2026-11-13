@@ -32,12 +32,16 @@ public class ConfigurationFileTests
     {
         var main = new MenuId("main");
         var more = new MenuId("more");
-        var app = Def("app.tool", "Herramienta", ActionCategory.Applications, new LaunchApplicationAction(@"C:\Apps\a.exe", "--x \"y\"", @"C:\Apps"), description: "Abre la herramienta.", tags: ["útil", "trabajo"]);
+        var app = Def("app.tool", "Herramienta", ActionCategory.Applications, new LaunchApplicationAction(@"C:\Apps\a.exe", ["--x", "y z", "con \"comillas\""], @"C:\Apps"), description: "Abre la herramienta.", tags: ["útil", "trabajo"]);
         var file = Def("file.doc", "Documento", ActionCategory.Files, new OpenFileAction(@"C:\Docs\a.txt"), new IconReference(IconSource.File, @"C:\Docs\a.txt"));
         var folder = Def("folder.docs", "Carpeta", ActionCategory.Files, new OpenFolderAction(@"C:\Docs"));
         var url = Def("url.example", "Web", ActionCategory.Browser, new OpenUrlAction("https://example.com/a?b=c"));
         var copy = Def("edit.copy-all", "Copiar", ActionCategory.Editing, new SendKeysAction(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, "C")), new IconReference(IconSource.Glyph, "Copy"), builtIn: true);
         var unplaced = Def("custom.sin-colocar", "Sin colocar", ActionCategory.Custom, new SendKeysAction(new KeyChord(KeyModifiers.Alt, "Oem3")));
+        var text = Def("custom.firma", "Firma", ActionCategory.Editing, new TypeTextAction("Saludos,\r\nAna \"la\" \\ ñ 😀\t."));
+        var volume = Def("media.mas-volumen", "Más volumen", ActionCategory.Multimedia, new VolumeAction(VolumeOperation.Increase, 10));
+        var mute = Def("media.silencio", "Silencio", ActionCategory.Multimedia, new VolumeAction(VolumeOperation.ToggleMute));
+        var window = Def("system.maximizar", "Maximizar", ActionCategory.System, new WindowControlAction(WindowOperation.Maximize));
         var futureInLibrary = Def("future.lib", "Futura", ActionCategory.Custom, new UnknownAction("futureLibraryAction", "{\"type\":\"futureLibraryAction\",\"x\":[1,{\"y\":null}]}"));
 
         return new RadialConfiguration
@@ -50,7 +54,7 @@ public class ConfigurationFileTests
                 BackDwell = TimeSpan.FromMilliseconds(900),
                 MaxDepth = 4,
             },
-            Actions = [app, file, folder, url, copy, unplaced, futureInLibrary],
+            Actions = [app, file, folder, url, copy, unplaced, futureInLibrary, text, volume, mute, window],
             Menus =
             [
                 new RadialMenu(

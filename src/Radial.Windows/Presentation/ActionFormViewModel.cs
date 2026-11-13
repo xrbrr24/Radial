@@ -21,7 +21,7 @@ public sealed class ActionFormViewModel : ObservableObject
 {
     /// <summary>Los tipos que se pueden crear (los de <see cref="ActionKind"/> menos «no soportada»).</summary>
     public static IReadOnlyList<ActionKind> CreatableKinds { get; } =
-        [ActionKind.Shortcut, ActionKind.Application, ActionKind.File, ActionKind.Folder, ActionKind.Url];
+        [ActionKind.Shortcut, ActionKind.Text, ActionKind.Application, ActionKind.File, ActionKind.Folder, ActionKind.Url, ActionKind.Volume, ActionKind.Window];
 
     // La sesión, no un editor: «Descartar» sustituye el editor de la sesión, y un formulario abierto debe seguir escribiendo en el vigente.
     private readonly ConfigurationSession _session;
@@ -38,6 +38,11 @@ public sealed class ActionFormViewModel : ObservableObject
     private string _arguments = string.Empty;
     private string _workingDirectory = string.Empty;
     private string _url = string.Empty;
+    private string _text = string.Empty;
+    private VolumeOperation _volumeOperation = VolumeOperation.Increase;
+    private string _volumePercent = "5";
+    private WindowOperation _windowOperation = WindowOperation.Minimize;
+    private bool _argumentsHaveLineBreaks;
     private bool _touched;
     private bool _loading;
     private string _saveError = string.Empty;
@@ -97,7 +102,8 @@ public sealed class ActionFormViewModel : ObservableObject
                 break;
             case LaunchApplicationAction launch:
                 form._path = launch.Path;
-                form._arguments = launch.Arguments ?? string.Empty;
+                form._arguments = string.Join(Environment.NewLine, launch.Arguments ?? []);
+                form._argumentsHaveLineBreaks = (launch.Arguments ?? []).Any(a => a.Contains('\n') || a.Contains('\r'));
                 form._workingDirectory = launch.WorkingDirectory ?? string.Empty;
                 break;
             case OpenFileAction file:
@@ -108,6 +114,18 @@ public sealed class ActionFormViewModel : ObservableObject
                 break;
             case OpenUrlAction url:
                 form._url = url.Url;
+                break;
+            case TypeTextAction typeText:
+                form._text = typeText.Text;
+                break;
+            case VolumeAction volume:
+                form._volumeOperation = volume.Operation;
+                form._volumePercent = volume.Operation == VolumeOperation.ToggleMute
+                    ? "5"
+                    : volume.Percent.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+            case WindowControlAction window:
+                form._windowOperation = window.Operation;
                 break;
         }
 
@@ -144,6 +162,9 @@ public sealed class ActionFormViewModel : ObservableObject
                 Raise(nameof(IsFile));
                 Raise(nameof(IsFolder));
                 Raise(nameof(IsUrl));
+                Raise(nameof(IsText));
+                Raise(nameof(IsVolume));
+                Raise(nameof(IsWindow));
                 Raise(nameof(UsesPath));
                 Raise(nameof(PathLabel));
                 OnFieldChanged();
@@ -160,6 +181,12 @@ public sealed class ActionFormViewModel : ObservableObject
     public bool IsFolder => _kind == ActionKind.Folder;
 
     public bool IsUrl => _kind == ActionKind.Url;
+
+    public bool IsText => _kind == ActionKind.Text;
+
+    public bool IsVolume => _kind == ActionKind.Volume;
+
+    public bool IsWindow => _kind == ActionKind.Window;
 
     public bool UsesPath => _kind is ActionKind.Application or ActionKind.File or ActionKind.Folder;
 
@@ -184,11 +211,45 @@ public sealed class ActionFormViewModel : ObservableObject
 
     public string Path { get => _path; set { if (Set(ref _path, value)) { OnFieldChanged(); } } }
 
-    public string Arguments { get => _arguments; set { if (Set(ref _arguments, value)) { OnFieldChanged(); } } }
+    /// <summary>Los argumentos del programa, UNO POR LÍNEA (sin comillas que escribir: cada línea es un argumento tal cual).</summary>
+    public string Arguments { get => _arguments; set { if (Set(ref _arguments, value ?? string.Empty)) { _argumentsHaveLineBreaks = false; OnFieldChanged(); } } }
 
     public string WorkingDirectory { get => _workingDirectory; set { if (Set(ref _workingDirectory, value)) { OnFieldChanged(); } } }
 
     public string Url { get => _url; set { if (Set(ref _url, value)) { OnFieldChanged(); } } }
+
+    /// <summary>El texto que se escribe (se envía tal cual, con sus saltos de línea).</summary>
+    public string Text { get => _text; set { if (Set(ref _text, value ?? string.Empty)) { OnFieldChanged(); } } }
+
+    public VolumeOperation VolumeOperation
+    {
+        get => _volumeOperation;
+        set
+        {
+            if (Set(ref _volumeOperation, value))
+            {
+                Raise(nameof(UsesVolumePercent));
+                Raise(nameof(VolumePercentLabel));
+                OnFieldChanged();
+            }
+        }
+    }
+
+    /// <summary>Subir y bajar usan una diferencia; fijar, un nivel; alternar el silencio no usa número.</summary>
+    public bool UsesVolumePercent => _volumeOperation != VolumeOperation.ToggleMute;
+
+    public string VolumePercentLabel => _volumeOperation == VolumeOperation.SetLevel ? "NIVEL (0–100 %)" : "DIFERENCIA (1–100 PUNTOS)";
+
+    /// <summary>El número escrito por el usuario (se valida como entero al guardar).</summary>
+    public string VolumePercent { get => _volumePercent; set { if (Set(ref _volumePercent, value ?? string.Empty)) { OnFieldChanged(); } } }
+
+    public WindowOperation WindowOperation { get => _windowOperation; set { if (Set(ref _windowOperation, value)) { OnFieldChanged(); } } }
+
+    public static IReadOnlyList<VolumeOperationOption> VolumeOperationOptions { get; } =
+        Enum.GetValues<VolumeOperation>().Select(o => new VolumeOperationOption(o, UiText.VolumeOperationName(o))).ToList();
+
+    public static IReadOnlyList<WindowOperationOption> WindowOperationOptions { get; } =
+        Enum.GetValues<WindowOperation>().Select(o => new WindowOperationOption(o, UiText.WindowOperationName(o))).ToList();
 
     /// <summary>Los tipos que se pueden elegir, con su nombre.</summary>
     public static IReadOnlyList<KindOption> KindOptions { get; } = CreatableKinds.Select(k => new KindOption(k, UiText.KindName(k))).ToList();
@@ -279,7 +340,12 @@ public sealed class ActionFormViewModel : ObservableObject
     private RadialAction BuildAction() => _kind switch
     {
         ActionKind.Shortcut => new SendKeysAction(Key.Chord ?? new KeyChord(Key.Modifiers, Key.KeyName ?? string.Empty)),
-        ActionKind.Application => new LaunchApplicationAction(_path.Trim(), NullIfEmpty(_arguments), NullIfEmpty(_workingDirectory)),
+        ActionKind.Application => new LaunchApplicationAction(_path.Trim(), ParseArguments(_arguments), NullIfEmpty(_workingDirectory)),
+        ActionKind.Text => new TypeTextAction(_text),
+        ActionKind.Volume => new VolumeAction(
+            _volumeOperation,
+            _volumeOperation == VolumeOperation.ToggleMute ? 0 : TryParsePercent(_volumePercent, out var percent) ? percent : -1),
+        ActionKind.Window => new WindowControlAction(_windowOperation),
         ActionKind.File => new OpenFileAction(_path.Trim()),
         ActionKind.Folder => new OpenFolderAction(_path.Trim()),
         _ => new OpenUrlAction(_url.Trim()),
@@ -316,6 +382,17 @@ public sealed class ActionFormViewModel : ObservableObject
                 break;
             case ActionKind.Url when string.IsNullOrWhiteSpace(_url):
                 problems.Add("Escribe la dirección web (http:// o https://).");
+                break;
+            case ActionKind.Text when string.IsNullOrEmpty(_text):
+                problems.Add("Escribe el texto que se va a insertar.");
+                break;
+            case ActionKind.Volume when _volumeOperation != VolumeOperation.ToggleMute && !TryParsePercent(_volumePercent, out _):
+                problems.Add(_volumeOperation == VolumeOperation.SetLevel
+                    ? "Escribe el nivel de volumen como un número entero (0–100)."
+                    : "Escribe la diferencia de volumen como un número entero (1–100).");
+                break;
+            case ActionKind.Application when _argumentsHaveLineBreaks:
+                problems.Add("Un argumento contiene saltos de línea y este formulario escribe un argumento por línea. Edítalo en config.json o bórralo y escribe los argumentos de nuevo.");
                 break;
         }
 
@@ -394,11 +471,24 @@ public sealed class ActionFormViewModel : ObservableObject
 
     private static string? NullIfEmpty(string text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
+    // Un argumento por línea; las líneas vacías se ignoran y cada argumento se recorta por los extremos. Sin interpretar comillas.
+    private static IReadOnlyList<string>? ParseArguments(string text)
+    {
+        var arguments = text.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
+        return arguments.Count == 0 ? null : arguments;
+    }
+
+    private static bool TryParsePercent(string text, out int percent) =>
+        int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out percent);
+
     private static ActionCategory DefaultCategory(ActionKind kind) => kind switch
     {
         ActionKind.Application => ActionCategory.Applications,
         ActionKind.File or ActionKind.Folder => ActionCategory.Files,
         ActionKind.Url => ActionCategory.Browser,
+        ActionKind.Text => ActionCategory.Editing,
+        ActionKind.Volume => ActionCategory.Multimedia,
+        ActionKind.Window => ActionCategory.System,
         _ => ActionCategory.Custom,
     };
 
@@ -409,12 +499,21 @@ public sealed class ActionFormViewModel : ObservableObject
         ActionKind.File => "Document",
         ActionKind.Folder => "Folder",
         ActionKind.Url => "Globe",
+        ActionKind.Text => "Keyboard",
+        ActionKind.Volume => "VolumeUp",
+        ActionKind.Window => "TaskView",
         _ => "Apps",
     };
 }
 
 /// <summary>Un tipo de acción elegible en el formulario.</summary>
 public sealed record KindOption(ActionKind Kind, string Name);
+
+/// <summary>Una operación de volumen elegible en el formulario.</summary>
+public sealed record VolumeOperationOption(VolumeOperation Operation, string Name);
+
+/// <summary>Una operación de ventana elegible en el formulario.</summary>
+public sealed record WindowOperationOption(WindowOperation Operation, string Name);
 
 /// <summary>Una categoría elegible en el formulario.</summary>
 public sealed record CategoryOption(ActionCategory Category, string Name);

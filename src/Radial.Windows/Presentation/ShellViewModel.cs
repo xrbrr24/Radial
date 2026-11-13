@@ -484,6 +484,9 @@ public sealed class ShellViewModel : ObservableObject
         all.Add(NewAction("Nueva acción: archivo", ActionKind.File, "Document"));
         all.Add(NewAction("Nueva acción: carpeta", ActionKind.Folder, "Folder"));
         all.Add(NewAction("Nueva acción: dirección web", ActionKind.Url, "Globe"));
+        all.Add(NewAction("Nueva acción: insertar texto", ActionKind.Text, "Keyboard"));
+        all.Add(NewAction("Nueva acción: volumen", ActionKind.Volume, "VolumeUp"));
+        all.Add(NewAction("Nueva acción: ventana activa", ActionKind.Window, "TaskView"));
         all.Add(new CommandEntry("Crear un grupo en el menú abierto", "Editor radial", "New", () =>
         {
             Go(AppSection.Editor);

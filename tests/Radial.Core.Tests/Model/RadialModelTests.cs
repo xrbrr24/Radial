@@ -50,7 +50,7 @@ public class RadialModelTests
     {
         RadialAction[] actions =
         [
-            new LaunchApplicationAction(@"C:\a.exe", "--x", @"C:\"),
+            new LaunchApplicationAction(@"C:\a.exe", ["--x"], @"C:\"),
             new OpenFileAction(@"C:\a.txt"),
             new OpenFolderAction(@"C:\"),
             new OpenUrlAction("https://example.com"),

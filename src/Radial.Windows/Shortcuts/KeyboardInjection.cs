@@ -3,9 +3,10 @@ using Radial.Core.Model;
 namespace Radial.Windows.Shortcuts;
 
 /// <summary>
-/// Un evento de teclado que se va a enviar: tecla virtual (<c>VK_*</c>), si es «extendida» y si es de soltar. Solo datos: no envía nada.
+/// Un evento de teclado que se va a enviar: tecla virtual (<c>VK_*</c>), si es «extendida» y si es de soltar. Con <paramref name="Unicode"/>
+/// el código no es una tecla virtual sino una unidad UTF-16 enviada como carácter (<c>KEYEVENTF_UNICODE</c>). Solo datos: no envía nada.
 /// </summary>
-public readonly record struct KeyboardEvent(ushort Code, bool Extended, bool KeyUp);
+public readonly record struct KeyboardEvent(ushort Code, bool Extended, bool KeyUp, bool Unicode = false);
 
 /// <param name="EventsInserted">Cuántos eventos aceptó el sistema (de los pedidos, contando desde el primero).</param>
 /// <param name="Win32Error">Código de error de Windows si <see cref="Success"/> es falso (puede ser 0 si el sistema no lo dio).</param>
@@ -109,7 +110,7 @@ internal static class ShortcutSequence
             }
             else
             {
-                var index = down.FindLastIndex(d => d.Code == e.Code);
+                var index = down.FindLastIndex(d => d.Code == e.Code && d.Unicode == e.Unicode);
                 if (index >= 0)
                 {
                     down.RemoveAt(index);

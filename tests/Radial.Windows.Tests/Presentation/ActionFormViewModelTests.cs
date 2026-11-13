@@ -82,14 +82,14 @@ public class ActionFormViewModelTests
         var form = NewForm(app, ActionKind.Application);
         form.Name = "Editor";
         form.Path = @"C:\Apps\editor.exe";
-        form.Arguments = "--nueva-ventana";
+        form.Arguments = "--nueva-ventana\r\n\r\n  Mi documento.txt  \r\n";
         form.WorkingDirectory = "   ";
 
         var result = form.Save();
 
         Assert.True(result.Success, result.Message);
         var saved = app.Editor.Current.Actions.Single(a => a.Name == "Editor");
-        Assert.Equal(new LaunchApplicationAction(@"C:\Apps\editor.exe", "--nueva-ventana", null), saved.Action);
+        Assert.Equal(new LaunchApplicationAction(@"C:\Apps\editor.exe", ["--nueva-ventana", "Mi documento.txt"], null), saved.Action);
     }
 
     [Fact]

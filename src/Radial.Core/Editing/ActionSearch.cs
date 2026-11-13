@@ -13,6 +13,9 @@ public enum ActionKind
     File,
     Folder,
     Url,
+    Text,
+    Volume,
+    Window,
 
     /// <summary>De un tipo que esta versión no conoce: se conserva pero no se ejecuta.</summary>
     Unsupported,
@@ -27,6 +30,9 @@ public static class ActionKinds
         OpenFileAction => ActionKind.File,
         OpenFolderAction => ActionKind.Folder,
         OpenUrlAction => ActionKind.Url,
+        TypeTextAction => ActionKind.Text,
+        VolumeAction => ActionKind.Volume,
+        WindowControlAction => ActionKind.Window,
         _ => ActionKind.Unsupported,
     };
 }
@@ -155,10 +161,11 @@ public static class ActionSearch
 
     private static string Target(RadialAction action) => action switch
     {
-        LaunchApplicationAction launch => string.Join(' ', launch.Path, launch.Arguments),
+        LaunchApplicationAction launch => string.Join(' ', new[] { launch.Path }.Concat(launch.Arguments ?? [])),
         OpenFileAction file => file.Path,
         OpenFolderAction folder => folder.Path,
         OpenUrlAction url => url.Url,
+        TypeTextAction text => text.Text,
         _ => string.Empty,
     };
 }

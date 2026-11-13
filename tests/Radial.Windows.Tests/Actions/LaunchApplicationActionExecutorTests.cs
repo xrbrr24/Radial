@@ -21,12 +21,12 @@ public class LaunchApplicationActionExecutorTests
     [Fact]
     public async Task TheRequest_CarriesTargetArgumentsAndWorkingDirectory_Separately()
     {
-        var (result, launcher) = await Run(new LaunchApplicationAction(@"C:\Apps\editor.exe", "--abrir \"mi doc.txt\" --modo rapido", @"C:\Trabajo"));
+        var (result, launcher) = await Run(new LaunchApplicationAction(@"C:\Apps\editor.exe", ["--abrir", "mi doc.txt", "--modo", "rapido"], @"C:\Trabajo"));
 
         Assert.True(result.IsSuccess);
         var request = Assert.Single(launcher.Requests);
         Assert.Equal(@"C:\Apps\editor.exe", request.Target);
-        Assert.Equal("--abrir \"mi doc.txt\" --modo rapido", request.Arguments);
+        Assert.Equal<string>(new[] { "--abrir", "mi doc.txt", "--modo", "rapido" }, request.Arguments);
         Assert.Equal(@"C:\Trabajo", request.WorkingDirectory);
     }
 
@@ -46,11 +46,11 @@ public class LaunchApplicationActionExecutorTests
         // Lo que parece un comando de terminal es solo texto: viaja intacto en su campo y no se añade al destino.
         const string hostile = "--x & del /q * | calc && powershell -c \"evil\"";
 
-        var (_, launcher) = await Run(new LaunchApplicationAction(@"C:\Apps\editor.exe", hostile));
+        var (_, launcher) = await Run(new LaunchApplicationAction(@"C:\Apps\editor.exe", [hostile]));
 
         var request = Assert.Single(launcher.Requests);
         Assert.Equal(@"C:\Apps\editor.exe", request.Target);
-        Assert.Equal(hostile, request.Arguments);
+        Assert.Equal<string>(new[] { hostile }, request.Arguments);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class LaunchApplicationActionExecutorTests
     [Fact]
     public async Task InvalidArgumentsOrWorkingDirectory_AreReportedAsInvalid_AndNothingIsLaunched()
     {
-        var (nullInArguments, first) = await Run(new LaunchApplicationAction(@"C:\Apps\a.exe", "a\0b"));
+        var (nullInArguments, first) = await Run(new LaunchApplicationAction(@"C:\Apps\a.exe", ["a\0b"]));
         var (nullInDirectory, second) = await Run(new LaunchApplicationAction(@"C:\Apps\a.exe", WorkingDirectory: "C:\\x\0"));
 
         Assert.Equal(ActionErrorCodes.InvalidAction, nullInArguments.Error!.Code);
